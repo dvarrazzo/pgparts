@@ -329,7 +329,7 @@ begin
     raise using
         message = 'no partition available on table %s',
         hint = format(
-            $m$You should call @extschema@.create_for(%L, %%L)$m$, new.%I);
+            $m$You should call @extschema@.create_for(%L, %%L).$m$, new.%I);
 end
 $$
 $f$,
@@ -374,7 +374,7 @@ begin
         message = format(
             $m$partition on table %s missing for %I = %%L$m$, new.%I),
         hint = format(
-            $m$You should call @extschema@.create_for(%L, %%L)$m$, new.%I);
+            $m$You should call @extschema@.create_for(%L, %%L).$m$, new.%I);
 end
 $$
 $f$,
