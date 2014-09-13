@@ -98,4 +98,65 @@ select pg_get_indexdef(indexrelid) from pg_index
 where indrelid = 'constr2_201409'::regclass
 order by 1;
 
+-- Ownership
+create user u1;
+create user u2;
+create user u3;
+create schema testown;
+grant create, usage on schema testown to public;
+set session authorization u1;
+create table testown.t1 (id int primary key, date date);
+grant insert on table testown.t1 to u2;
+grant select on table testown.t1 to u2 with grant option;
+create table testown.t2 (id int primary key, date date);
+revoke truncate on table testown.t2 from u1;
+reset session authorization;
+set session authorization u2;
+grant select on table testown.t1 to u3;
+grant select on table testown.t1 to public;
+create table testown.t3 (id int primary key, date date);
+reset session authorization;
+alter table testown.t3 owner to u3;
+
+create or replace function comp_acls(src regclass, tgt regclass,
+   out src_acl aclitem, out tgt_acl aclitem, out match bool)
+returns setof record
+language sql as
+$$
+    with src as (select unnest(relacl) as src_acl from pg_class
+        where oid = $1
+        order by 1::text),
+    tgt as (select unnest(relacl) as tgt_acl from pg_class
+        where oid = $2
+        order by 1::text)
+    select *, src_acl = tgt_acl
+    from src full outer join tgt on src_acl = tgt_acl
+    order by 1::text;
+$$;
+
+select partest.setup('testown.t1', 'date', 'monthly', '{1}');
+select partest.create_for('testown.t1', '2014-09-01');
+select * from comp_acls('testown.t1', 'testown.t1_201409');
+select usename from pg_user u join pg_class c on c.relowner = u.usesysid
+where c.oid = 'testown.t1'::regclass;
+
+select partest.setup('testown.t2', 'date', 'monthly', '{1}');
+select partest.create_for('testown.t2', '2014-09-01');
+select * from comp_acls('testown.t2', 'testown.t2_201409');
+select usename from pg_user u join pg_class c on c.relowner = u.usesysid
+where c.oid = 'testown.t1'::regclass;
+
+select partest.setup('testown.t3', 'date', 'monthly', '{1}');
+select partest.create_for('testown.t3', '2014-09-01');
+select * from comp_acls('testown.t3', 'testown.t3_201409');
+select usename from pg_user u join pg_class c on c.relowner = u.usesysid
+where c.oid = 'testown.t1'::regclass;
+
+set client_min_messages to 'error';
+drop schema testown cascade;
+reset client_min_messages;
+drop user u1;
+drop user u2;
+drop user u3;
+
 drop extension pgparts;

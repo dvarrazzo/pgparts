@@ -202,4 +202,86 @@ order by 1;
  CREATE UNIQUE INDEX "constr.2_201409_uint_key" ON "s3.s4"."constr.2_201409" USING btree (uint)
 (6 rows)
 
+-- Ownership
+create user "u.1";
+create user "u.2";
+create schema "test.own";
+grant create, usage on schema "test.own" to public;
+set session authorization "u.1";
+create table "test.own"."t.1" (id int primary key, date date);
+grant insert on table "test.own"."t.1" to "u.2";
+grant select on table "test.own"."t.1" to "u.2" with grant option;
+reset session authorization;
+create table "test.own"."t.2" (id int primary key, date date);
+alter table "test.own"."t.2" owner to "u.2";
+create or replace function comp_acls(src regclass, tgt regclass,
+   out src_acl aclitem, out tgt_acl aclitem, out match bool)
+returns setof record
+language sql as
+$$
+    with src as (select unnest(relacl) as src_acl from pg_class
+        where oid = $1
+        order by 1::text),
+    tgt as (select unnest(relacl) as tgt_acl from pg_class
+        where oid = $2
+        order by 1::text)
+    select *, src_acl = tgt_acl
+    from src full outer join tgt on src_acl = tgt_acl
+    order by 1::text;
+$$;
+select "s1.s2".setup('"test.own"."t.1"', 'date', 'monthly', '{1}');
+ setup 
+-------
+ 
+(1 row)
+
+select "s1.s2".create_for('"test.own"."t.1"', '2014-09-01');
+       create_for        
+-------------------------
+ "test.own"."t.1_201409"
+(1 row)
+
+select * from comp_acls('"test.own"."t.1"', '"test.own"."t.1_201409"');
+       src_acl       |       tgt_acl       | match 
+---------------------+---------------------+-------
+ "u.1"=arwdDxt/"u.1" | "u.1"=arwdDxt/"u.1" | t
+ "u.2"=ar*/"u.1"     | "u.2"=ar*/"u.1"     | t
+(2 rows)
+
+select usename from pg_user u join pg_class c on c.relowner = u.usesysid
+where c.oid = '"test.own"."t.1"'::regclass;
+ usename 
+---------
+ u.1
+(1 row)
+
+select "s1.s2".setup('"test.own"."t.2"', 'date', 'monthly', '{1}');
+ setup 
+-------
+ 
+(1 row)
+
+select "s1.s2".create_for('"test.own"."t.2"', '2014-09-01');
+       create_for        
+-------------------------
+ "test.own"."t.2_201409"
+(1 row)
+
+select * from comp_acls('"test.own"."t.2"', '"test.own"."t.2_201409"');
+ src_acl | tgt_acl | match 
+---------+---------+-------
+(0 rows)
+
+select usename from pg_user u join pg_class c on c.relowner = u.usesysid
+where c.oid = '"test.own"."t.2"'::regclass;
+ usename 
+---------
+ u.2
+(1 row)
+
+set client_min_messages to 'error';
+drop schema "test.own" cascade;
+reset client_min_messages;
+drop user "u.1";
+drop user "u.2";
 drop extension pgparts;

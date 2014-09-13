@@ -163,6 +163,15 @@ $$
     where c.oid = $1;
 $$;
 
+create function _owner_name("table" regclass) returns name
+language sql stable as
+$$
+    select usename
+    from pg_class c
+    join pg_user u on relowner = usesysid
+    where c.oid = $1;
+$$;
+
 create function name_for("table" regclass, value text) returns name
 language sql stable as
 $$
@@ -559,8 +568,9 @@ begin
     partition = @extschema@.partition_for("table", value);
     perform @extschema@._copy_constraints("table", partition);
     perform @extschema@._copy_indexes("table", partition);
+    perform @extschema@._copy_owner("table", partition);
+    perform @extschema@._copy_permissions("table", partition);
     -- TODO: inherit the rest
-    -- perform @extschema@._copy_permissions("table", partition);
     -- perform @extschema@._copy_attributes("table", partition);
 
     -- Return the oid of the new table
@@ -650,6 +660,80 @@ begin
         name = orig || seq;
     end loop;
     return name;
+end
+$$;
+
+create function _copy_owner(src regclass, tgt regclass) returns void
+language plpgsql as $$
+declare
+    osrc name = @extschema@._owner_name(src);
+    otgt name = @extschema@._owner_name(tgt);
+begin
+    if osrc <> otgt then
+        execute format('alter table %s owner to %I', tgt, osrc);
+    end if;
+end
+$$;
+
+create function _copy_permissions(src regclass, tgt regclass) returns void
+language plpgsql as $$
+declare
+    grantee text;
+    set_sess text;
+    grant text;
+    reset_sess text;
+declare
+    prev_grantee text = '';
+begin
+    for grantee, set_sess, grant, reset_sess in
+        with acl as (
+            select unnest(relacl) as acl
+            from pg_class where oid = src),
+        acl_token as (
+            select regexp_matches(acl::text, '([^=]*)=([^/]*)(?:/(.*))?')
+                as acl_group
+            from acl),
+        acl_bit as (
+            select acl_group[1] as grantee,
+                regexp_matches(acl_group[2], '(.)(\*?)', 'g') as bits,
+                acl_group[3] as grantor
+            from acl_token),
+        bit_perm (bit, perm) as (values
+            ('r', 'select'), ('w', 'update'), ('a', 'insert'), ('d', 'delete'),
+            ('D', 'truncate'), ('x', 'references'), ('t', 'trigger')),
+        pretty as (
+            select case when b.grantee = '' then 'public' else b.grantee end
+                as grantee,
+            p.perm, b.bits[2] = '*' as grant_opt, b.grantor
+            from acl_bit b left join bit_perm p on p.bit = b.bits[1])
+        select
+            p.grantee,
+            case when current_user <> p.grantor then
+                format('set session authorization %s', p.grantor) end
+                    as set_sess,
+            format (
+                'grant %s on table %s to %s%s', perm, tgt, p.grantee,
+                case when grant_opt then ' with grant option' else '' end)
+                    as grant,
+            case when current_user <> p.grantor then
+                'reset session authorization'::text end as reset_sess
+        from pretty p
+    loop
+        -- For each grantee, revoke all his roles and set them from scratch.
+        -- This could have been done with a window function but the
+        -- query is already complicated enough...
+        if prev_grantee <> grantee then
+            execute format('revoke all on %s from %s', tgt, grantee);
+            prev_grantee = grantee;
+        end if;
+        if set_sess is not null then
+            execute set_sess;
+        end if;
+        execute "grant";
+        if reset_sess is not null then
+            execute reset_sess;
+        end if;
+    end loop;
 end
 $$;
 
