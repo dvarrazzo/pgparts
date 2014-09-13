@@ -1,0 +1,103 @@
+create schema partest;
+set datestyle = 'ISO';
+create extension pgparts with schema partest;
+create schema "n1.n2";
+create table sometbl (
+    id serial primary key,
+    day date not null,
+    data text);
+create table "n1.n2"."t1.t2" (
+    id serial primary key,
+    day date not null,
+    data text);
+select partest.create_for('sometbl', '2014-09-15');
+ERROR:  the table sometbl has not been partitioned yet
+HINT:  You should call partest.setup('sometbl').
+select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
+ setup 
+-------
+ 
+(1 row)
+
+-- This insert fails
+insert into sometbl values (100, '2014-09-15', 'first');
+ERROR:  no partition available on table sometbl
+HINT:  You should call partest.create_for('sometbl', '2014-09-15')
+select * from only sometbl;
+ id | day | data 
+----+-----+------
+(0 rows)
+
+select partest.create_for('sometbl', '2014-09-15');
+   create_for   
+----------------
+ sometbl_201407
+(1 row)
+
+-- Insert
+insert into sometbl values (100, '2014-09-15', 'first');
+select * from only sometbl;
+ id | day | data 
+----+-----+------
+(0 rows)
+
+select * from only sometbl_201407;
+ id  |    day     | data  
+-----+------------+-------
+ 100 | 2014-09-15 | first
+(1 row)
+
+-- Update, no partition change
+update sometbl set day = '2014-8-15' where id = 100;
+select * from only sometbl;
+ id | day | data 
+----+-----+------
+(0 rows)
+
+select * from only sometbl_201407;
+ id  |    day     | data  
+-----+------------+-------
+ 100 | 2014-08-15 | first
+(1 row)
+
+-- Update to fail partition
+update sometbl set day = '2014-10-15' where id = 100;
+ERROR:  partition on table sometbl missing for day = '2014-10-15'
+HINT:  You should call partest.create_for('sometbl', '2014-10-15')
+CONTEXT:  SQL statement "insert into sometbl values (new.*)"
+PL/pgSQL function sometbl_partition_update() line 4 at SQL statement
+select * from only sometbl;
+ id | day | data 
+----+-----+------
+(0 rows)
+
+select * from only sometbl_201407;
+ id  |    day     | data  
+-----+------------+-------
+ 100 | 2014-08-15 | first
+(1 row)
+
+-- Create the missing partition and try again
+select partest.create_for('sometbl', '2014-10-15');
+   create_for   
+----------------
+ sometbl_201410
+(1 row)
+
+update sometbl set day = '2014-10-15' where id = 100;
+select * from only sometbl;
+ id | day | data 
+----+-----+------
+(0 rows)
+
+select * from only sometbl_201407;
+ id | day | data 
+----+-----+------
+(0 rows)
+
+select * from only sometbl_201410;
+ id  |    day     | data  
+-----+------------+-------
+ 100 | 2014-10-15 | first
+(1 row)
+
