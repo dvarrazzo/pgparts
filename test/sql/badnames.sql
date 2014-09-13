@@ -54,4 +54,35 @@ select "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10');
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
 select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10' order by id;
 
+-- Constraints and indexes
+create table "s3.s4"."constr.1" (id1 int, id2 int, primary key (id1, id2));
+insert into "s3.s4"."constr.1" values (1,2), (3,4);
+create table "s3.s4"."constr.2" (
+    id serial primary key,
+    date date not null,
+    fid1 int, fid2 int,
+    foreign key (fid1, fid2) references "s3.s4"."constr.1" (id1, id2),
+    uint int check (uint > 0),
+    unique (uint),
+    iint int,
+    c circle,
+    exclude using gist (c with &&)
+);
+
+create index constr2_iint on "s3.s4"."constr.2" (iint);
+create unique index somename on "s3.s4"."constr.2" (iint) where id > 0;
+create unique index taken on "s3.s4"."constr.2" (iint) where id > 1;
+create table "s3.s4"."constr.2_201409_taken" ();
+
+select "s1.s2".setup('"s3.s4"."constr.2" ', 'date', 'monthly', '{1}');
+select "s1.s2".create_for('"s3.s4"."constr.2" ', '2014-09-01');
+
+select conname, pg_get_constraintdef(oid, true) from pg_constraint
+where conrelid = '"s3.s4"."constr.2_201409"'::regclass
+order by conname;
+
+select pg_get_indexdef(indexrelid) from pg_index
+where indrelid = '"s3.s4"."constr.2_201409"'::regclass
+order by 1;
+
 drop extension pgparts;

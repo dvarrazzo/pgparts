@@ -191,7 +191,9 @@ create table constr2 (
     exclude using gist (c with &&)
 );
 create index constr2_iint on constr2(iint);
-create index somename on constr2(iint) where id > 0;
+create unique index somename on constr2(iint) where id > 0;
+create unique index taken on constr2(iint) where id > 1;
+create table constr2_201409_taken ();
 select partest.setup('constr2', 'date', 'monthly', '{1}');
  setup 
 -------
@@ -215,6 +217,19 @@ order by conname;
  constr2_201409_pkey            | PRIMARY KEY (id)
  constr2_201409_uint_key        | UNIQUE (uint)
  constr2_uint_check             | CHECK (uint > 0)
+(6 rows)
+
+select pg_get_indexdef(indexrelid) from pg_index
+where indrelid = 'constr2_201409'::regclass
+order by 1;
+                                         pg_get_indexdef                                         
+-------------------------------------------------------------------------------------------------
+ CREATE INDEX constr2_201409_c_excl ON constr2_201409 USING gist (c)
+ CREATE INDEX constr2_201409_iint ON constr2_201409 USING btree (iint)
+ CREATE UNIQUE INDEX constr2_201409_pkey ON constr2_201409 USING btree (id)
+ CREATE UNIQUE INDEX constr2_201409_somename ON constr2_201409 USING btree (iint) WHERE (id > 0)
+ CREATE UNIQUE INDEX constr2_201409_taken1 ON constr2_201409 USING btree (iint) WHERE (id > 1)
+ CREATE UNIQUE INDEX constr2_201409_uint_key ON constr2_201409 USING btree (uint)
 (6 rows)
 
 drop extension pgparts;

@@ -83,7 +83,9 @@ create table constr2 (
 );
 
 create index constr2_iint on constr2(iint);
-create index somename on constr2(iint) where id > 0;
+create unique index somename on constr2(iint) where id > 0;
+create unique index taken on constr2(iint) where id > 1;
+create table constr2_201409_taken ();
 
 select partest.setup('constr2', 'date', 'monthly', '{1}');
 select partest.create_for('constr2', '2014-09-01');
@@ -91,5 +93,9 @@ select partest.create_for('constr2', '2014-09-01');
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
 where conrelid = 'constr2_201409'::regclass
 order by conname;
+
+select pg_get_indexdef(indexrelid) from pg_index
+where indrelid = 'constr2_201409'::regclass
+order by 1;
 
 drop extension pgparts;

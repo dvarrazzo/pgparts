@@ -558,8 +558,8 @@ begin
 
     partition = @extschema@.partition_for("table", value);
     perform @extschema@._copy_constraints("table", partition);
+    perform @extschema@._copy_indexes("table", partition);
     -- TODO: inherit the rest
-    -- perform @extschema@._copy_indexes("table", partition);
     -- perform @extschema@._copy_permissions("table", partition);
     -- perform @extschema@._copy_attributes("table", partition);
 
@@ -587,6 +587,69 @@ begin
     loop
         execute stmt;
     end loop;
+end
+$$;
+
+create function _copy_indexes(src regclass, tgt regclass) returns void
+language plpgsql as $body$
+declare
+    isrcname name;
+    itgtname name;
+    indexdef text;
+    srcname name = @extschema@._table_name(src);
+    tgtname name = @extschema@._table_name(tgt);
+    schema name = @extschema@._schema_name(tgt);
+    parts text[];
+begin
+    for isrcname, indexdef in select
+        ic.relname, pg_get_indexdef(indexrelid)
+        from pg_index i
+        join pg_class ic on ic.oid = i.indexrelid
+        where indrelid = src
+        and not exists (
+            select 1 from pg_constraint
+            where conrelid = src
+            and conindid = indexrelid)
+    loop
+        -- Indexes require an unique name. Replace the src table name with the
+        -- tgt if the table name is contained in the index name, else make up
+        -- something.
+        if position(srcname in isrcname) > 0 then
+            itgtname = overlay(isrcname placing tgtname
+                from position(srcname in isrcname)
+                for length(srcname));
+        else
+            itgtname = tgtname || '_' || isrcname;
+        end if;
+
+        -- Make sure the new name is unique
+        itgtname = @extschema@._make_unique_relname(schema, itgtname);
+
+        -- Find the elements in the index definition.
+        -- The 'strict' causes an error if the regexp fails to parse
+        select regexp_matches(indexdef,
+            '^(CREATE (?:UNIQUE )?INDEX )(.*)( ON )(.*)( USING .*)$')
+        into strict parts;
+        execute format('%s%I%s%s%s',
+            parts[1], itgtname, parts[3], tgt, parts[5]);
+
+    end loop;
+end
+$body$;
+
+create function _make_unique_relname(schema name, name name) returns name
+language plpgsql stable as $$
+declare
+    orig name = name;
+    seq int = 0;
+begin
+    loop
+        perform 1 from pg_class where relname = name;
+        exit when not found;
+        seq = seq + 1;
+        name = orig || seq;
+    end loop;
+    return name;
 end
 $$;
 
