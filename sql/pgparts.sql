@@ -96,7 +96,7 @@ begin
     into strict value2key, key2name;
 
     execute 'select ' || key2name
-        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text, $3)'
+        || '($1, ' || value2key || '($1, $2::' || field_type || '), $3)'
     into strict rv using params, value, base_name;
     return rv;
 end
@@ -116,7 +116,7 @@ begin
     into strict value2key, key2start;
 
     execute 'select ' || key2start
-        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text)'
+        || '($1, ' || value2key || '($1, $2::' || field_type || '))'
     into strict rv using params, value;
     return rv;
 end
@@ -136,7 +136,7 @@ begin
     into strict value2key, key2end;
 
     execute 'select ' || key2end
-        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text)'
+        || '($1, ' || value2key || '($1, $2::' || field_type || '))'
     into strict rv using params, value;
     return rv;
 end
@@ -811,21 +811,21 @@ $$
         / params[1]::int) * params[1]::int;
 $$;
 
-create function _month2start(params text[], key text) returns date
+create function _month2start(params text[], key int) returns date
 language sql stable as
 $$
     select ('0001-01-01'::date
-        + '1 month'::interval * key::int
+        + '1 month'::interval * key
         - '1 year'::interval)::date;
 $$;
 
-create function _month2end(params text[], key text) returns date
+create function _month2end(params text[], key int) returns date
 language sql stable as $$
     select (@extschema@._month2start(params, key)
         + '1 month'::interval * params[1]::int)::date;
 $$;
 
-create function _month2name(params text[], key text, base_name name)
+create function _month2name(params text[], key int, base_name name)
 returns name language sql stable as
 $$
     select (base_name || '_'
