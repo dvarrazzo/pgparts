@@ -3,11 +3,21 @@
 create table partition_schema (
     field_type regtype,
     name name,
-    primary key(field_type, name),
+    primary key (field_type, name),
 
     params text[] not null,
+    description text
+);
 
+create table _schema_vtable (
     -- vtable
+    field_type regtype,
+    name name,
+    primary key (field_type, name),
+    foreign key (field_type, name)
+        references partition_schema (field_type, name)
+        on update cascade on delete cascade,
+
     value2key name not null,
     key2name name not null,
     key2start name not null,
@@ -208,7 +218,7 @@ $f$
 create or replace function %I.%I()
 returns trigger language plpgsql as $$
 begin
-    %s
+%s
     raise using
         message = format(
             $m$partition on table %I missing for %I = %%L$m$, new.%I),
@@ -413,8 +423,8 @@ declare
     value2key text;
     rv text;
 begin
-    select s.value2key from @extschema@.partition_schema s
-    where (s.field_type, s.name) = (value2key.field_type, value2key.schema_name)
+    select v.value2key from @extschema@._schema_vtable v
+    where (v.field_type, v.name) = (value2key.field_type, value2key.schema_name)
     into strict value2key;
 
     execute 'select ' || value2key || '($1, $2::' || field_type || ')'
@@ -432,8 +442,8 @@ declare
     key2name text;
     rv text;
 begin
-    select s.value2key, s.key2name from @extschema@.partition_schema s
-    where (s.field_type, s.name)
+    select v.value2key, v.key2name from @extschema@._schema_vtable v
+    where (v.field_type, v.name)
         = (value2name.field_type, value2name.schema_name)
     into strict value2key, key2name;
 
@@ -464,8 +474,8 @@ declare
     key2start text;
     rv text;
 begin
-    select s.value2key, s.key2start from @extschema@.partition_schema s
-    where (s.field_type, s.name)
+    select v.value2key, v.key2start from @extschema@._schema_vtable v
+    where (v.field_type, v.name)
         = (value2start.field_type, value2start.schema_name)
     into strict value2key, key2start;
 
@@ -495,8 +505,8 @@ declare
     key2end text;
     rv text;
 begin
-    select s.value2key, s.key2end from @extschema@.partition_schema s
-    where (s.field_type, s.name)
+    select v.value2key, v.key2end from @extschema@._schema_vtable v
+    where (v.field_type, v.name)
         = (value2end.field_type, value2end.schema_name)
     into strict value2key, key2end;
 
@@ -551,6 +561,16 @@ $$;
 
 insert into partition_schema values (
     'date'::regtype, 'monthly', '{months_per_partiton}',
+$$Each partition of the table contains 'months_per_partiton' months.
+
+The partitioning triggers checks the partitions from the newest to the oldest
+so, if normal inserts happens in order of time, dispatching to the right
+partition should be o(1), whereas for random inserts dispatching is o(n) in the
+number of partitions.
+$$);
+
+insert into _schema_vtable values (
+    'date'::regtype, 'monthly',
     '@extschema@.month2key', '@extschema@.month2name',
     '@extschema@.month2start', '@extschema@.month2end');
 
