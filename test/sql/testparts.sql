@@ -13,8 +13,10 @@ select * from partest.info('sometbl', '2014-09-15');
 select partest.create_for('sometbl', '2014-09-15');
 
 select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
-
 select * from partest.info('sometbl', '2014-09-15');
+
+-- Setup works once
+select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
 
 -- This insert fails
 insert into sometbl values (100, '2014-09-15', 'first');

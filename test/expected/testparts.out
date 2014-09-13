@@ -26,6 +26,10 @@ select * from partest.info('sometbl', '2014-09-15');
  missing | 
 (1 row)
 
+-- Setup works once
+select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
+ERROR:  the table sometbl is already partitioned
+HINT:  Use partest.create_for('sometbl', VALUE) to create new partitions on the table.
 -- This insert fails
 insert into sometbl values (100, '2014-09-15', 'first');
 ERROR:  no partition available on table sometbl

@@ -260,7 +260,18 @@ declare
     field_type regtype;
 begin
     begin  -- transaction
-        -- find the type of the field
+        -- Check the table is already set up
+        perform 1 from @extschema@.partitioned_table t
+        where t."table" = setup."table";
+        if found then
+            raise using
+                message = format('the table %s is already partitioned',
+                    "table"),
+                hint = format('Use @extschema@.create_for(%L, VALUE) '
+                    'to create new partitions on the table.', "table");
+        end if;
+
+        -- Find the type of the field
         select atttypid from pg_attribute a
         where attrelid = "table" and attname = field
         into field_type;
