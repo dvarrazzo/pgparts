@@ -18,7 +18,7 @@ You can set up a partitioned base table with the function:
 where `SCHEMA_NAME` is one of the partitioning schemas available in the table
 `parts.partition_schema` and `SCHEMA_PARAMS` the values required by such
 schema. Check the `partition_schema.description` for help about the available
-schemas (TODO).
+schemas.
 
 Once the table is set up you can create a new partition for the table using:
 
