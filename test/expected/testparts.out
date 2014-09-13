@@ -176,4 +176,45 @@ select partest.attach_for('sometbl', '2014-07-10');
  sometbl_201407
 (1 row)
 
+-- Constraints and indexes
+create table constr1 (id1 int, id2 int, primary key (id1, id2));
+insert into constr1 values (1,2), (3,4);
+create table constr2 (
+    id serial primary key,
+    date date not null,
+    fid1 int, fid2 int,
+    foreign key (fid1, fid2) references constr1 (id1, id2),
+    uint int check (uint > 0),
+    unique (uint),
+    iint int,
+    c circle,
+    exclude using gist (c with &&)
+);
+create index constr2_iint on constr2(iint);
+create index somename on constr2(iint) where id > 0;
+select partest.setup('constr2', 'date', 'monthly', '{1}');
+ setup 
+-------
+ 
+(1 row)
+
+select partest.create_for('constr2', '2014-09-01');
+   create_for   
+----------------
+ constr2_201409
+(1 row)
+
+select conname, pg_get_constraintdef(oid, true) from pg_constraint
+where conrelid = 'constr2_201409'::regclass
+order by conname;
+            conname             |                       pg_get_constraintdef                       
+--------------------------------+------------------------------------------------------------------
+ constr2_201409_c_excl          | EXCLUDE USING gist (c WITH &&)
+ constr2_201409_fid1_fkey       | FOREIGN KEY (fid1, fid2) REFERENCES constr1(id1, id2)
+ constr2_201409_partition_check | CHECK ('2014-09-01'::date <= date AND date < '2014-10-01'::date)
+ constr2_201409_pkey            | PRIMARY KEY (id)
+ constr2_201409_uint_key        | UNIQUE (uint)
+ constr2_uint_check             | CHECK (uint > 0)
+(6 rows)
+
 drop extension pgparts;

@@ -67,4 +67,29 @@ select * from sometbl where day = '2014-07-10' order by id;
 -- Idempotent
 select partest.attach_for('sometbl', '2014-07-10');
 
+-- Constraints and indexes
+create table constr1 (id1 int, id2 int, primary key (id1, id2));
+insert into constr1 values (1,2), (3,4);
+create table constr2 (
+    id serial primary key,
+    date date not null,
+    fid1 int, fid2 int,
+    foreign key (fid1, fid2) references constr1 (id1, id2),
+    uint int check (uint > 0),
+    unique (uint),
+    iint int,
+    c circle,
+    exclude using gist (c with &&)
+);
+
+create index constr2_iint on constr2(iint);
+create index somename on constr2(iint) where id > 0;
+
+select partest.setup('constr2', 'date', 'monthly', '{1}');
+select partest.create_for('constr2', '2014-09-01');
+
+select conname, pg_get_constraintdef(oid, true) from pg_constraint
+where conrelid = 'constr2_201409'::regclass
+order by conname;
+
 drop extension pgparts;

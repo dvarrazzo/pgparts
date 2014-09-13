@@ -551,13 +551,42 @@ language plpgsql as
 $$
 declare
     name name = @extschema@.name_for("table", value);
+    partition regclass;
 begin
     execute format ('create table %I.%I () inherits (%s)',
         @extschema@._schema_name("table"), name, "table");
+
+    partition = @extschema@.partition_for("table", value);
+    perform @extschema@._copy_constraints("table", partition);
     -- TODO: inherit the rest
+    -- perform @extschema@._copy_indexes("table", partition);
+    -- perform @extschema@._copy_permissions("table", partition);
+    -- perform @extschema@._copy_attributes("table", partition);
 
     -- Return the oid of the new table
-    return @extschema@.partition_for("table", value);
+    return partition;
+end
+$$;
+
+create function _copy_constraints(src regclass, tgt regclass) returns void
+language plpgsql as $$
+declare
+    stmt text;
+begin
+    -- Inheritance has copied a few constraints (the checks) but not others.
+    -- Assume it works by type so always copies *all* the checks and none
+    -- of the fkeys. So look at the type of constraints already created and
+    -- only copy the other types.
+    -- TODO: what to do with NO INHERIT constrs?
+    for stmt in select
+        format('alter table %s add %s', tgt, pg_get_constraintdef(oid))
+    from pg_constraint where
+    conrelid = src
+    and contype not in (
+        select contype from pg_constraint where conrelid = tgt)
+    loop
+        execute stmt;
+    end loop;
 end
 $$;
 
@@ -587,7 +616,9 @@ begin
         create trigger %I before update on %s
         for each row when (not (%L <= new.%I and new.%I < %L))
         execute procedure %I.%I();
-        $t$, tname, partition, start_value, field, field, end_value, sname, fname);
+        $t$, tname, partition,
+        start_value, field, field, end_value,
+        sname, fname);
 end
 $f$;
 
@@ -607,7 +638,7 @@ begin
 
     execute format(
         'alter table %s add constraint %I check (%L <= %I and %I < %L)',
-        partition, partname || '_partition_chk',
+        partition, partname || '_partition_check',
         start_value, field, field, end_value);
 end
 $f$;
