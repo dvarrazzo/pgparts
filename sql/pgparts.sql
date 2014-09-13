@@ -7,9 +7,8 @@
 -- Tables used to memorize partitioned tables {{{
 
 create table partition_schema (
-    field_type regtype,
     name name,
-    primary key (field_type, name),
+    primary key (name),
 
     params text[] not null,
     description text
@@ -19,6 +18,21 @@ comment on table partition_schema is
     'The partitioning schemas the system knows';
 
 
+create table _schema_vtable (
+    schema_name name,
+    foreign key (schema_name)
+        references partition_schema (name)
+        on update cascade on delete cascade,
+    field_type regtype,
+    primary key (schema_name, field_type),
+
+    value2key name not null,
+    key2name name not null,
+    key2start name not null,
+    key2end name not null
+);
+
+
 create table partitioned_table (
     "table" regclass primary key,
     field name not null,
@@ -26,7 +40,7 @@ create table partitioned_table (
     field_type regtype not null,
     schema_name text not null,
     foreign key (field_type, schema_name)
-        references partition_schema (field_type, name),
+        references _schema_vtable (field_type, schema_name),
 
     schema_params text[] not null
 );
@@ -49,21 +63,6 @@ comment on table partition is
 
 -- Virtual methods dispatch {{{
 
-create table _schema_vtable (
-    field_type regtype,
-    name name,
-    primary key (field_type, name),
-    foreign key (field_type, name)
-        references partition_schema (field_type, name)
-        on update cascade on delete cascade,
-
-    value2key name not null,
-    key2name name not null,
-    key2start name not null,
-    key2end name not null
-);
-
-
 create function _value2key(
     field_type regtype, schema_name name, params text[], value text)
 returns text language plpgsql stable as $$
@@ -72,7 +71,7 @@ declare
     rv text;
 begin
     select v.value2key from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
+    where (v.field_type, v.schema_name)
         = (_value2key.field_type, _value2key.schema_name)
     into strict value2key;
 
@@ -92,7 +91,7 @@ declare
     rv text;
 begin
     select v.value2key, v.key2name from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
+    where (v.field_type, v.schema_name)
         = (_value2name.field_type, _value2name.schema_name)
     into strict value2key, key2name;
 
@@ -112,7 +111,7 @@ declare
     rv text;
 begin
     select v.value2key, v.key2start from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
+    where (v.field_type, v.schema_name)
         = (_value2start.field_type, _value2start.schema_name)
     into strict value2key, key2start;
 
@@ -132,7 +131,7 @@ declare
     rv text;
 begin
     select v.value2key, v.key2end from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
+    where (v.field_type, v.schema_name)
         = (_value2end.field_type, _value2end.schema_name)
     into strict value2key, key2end;
 
@@ -296,8 +295,8 @@ begin
         end if;
 
         -- Does this partitioning schema exist?
-        perform 1 from @extschema@.partition_schema ps
-            where (ps.field_type, ps.name)
+        perform 1 from @extschema@._schema_vtable v
+            where (v.field_type, v.schema_name)
                 = (block.field_type, setup.schema_name);
         if not found then
             raise 'partitioning schema % on type % not known',
@@ -834,7 +833,7 @@ $$
 $$;
 
 insert into partition_schema values (
-    'date'::regtype, 'monthly', '{months_per_partiton}',
+    'monthly', '{months_per_partiton}',
 $$Each partition of the table contains 'months_per_partiton' months.
 
 The partitioning triggers checks the partitions from the newest to the oldest
@@ -844,25 +843,17 @@ number of partitions.
 $$);
 
 insert into _schema_vtable values (
-    'date'::regtype, 'monthly',
+    'monthly', 'date'::regtype,
     '@extschema@._month2key', '@extschema@._month2name',
     '@extschema@._month2start', '@extschema@._month2end');
 
-insert into partition_schema values (
-    'timestamp'::regtype, 'monthly', '{months_per_partiton}',
-$$TODO: maybe separate data type?$$);
-
 insert into _schema_vtable values (
-    'timestamp'::regtype, 'monthly',
+    'monthly', 'timestamp'::regtype,
     '@extschema@._month2key', '@extschema@._month2name',
     '@extschema@._month2start', '@extschema@._month2end');
 
-insert into partition_schema values (
-    'timestamptz'::regtype, 'monthly', '{months_per_partiton}',
-$$TODO: maybe separate data type?$$);
-
 insert into _schema_vtable values (
-    'timestamptz'::regtype, 'monthly',
+    'monthly', 'timestamptz'::regtype,
     '@extschema@._month2key', '@extschema@._month2name',
     '@extschema@._month2start', '@extschema@._month2end');
 
