@@ -1,5 +1,5 @@
-pgparts -- minimal partitiions management
-=========================================
+pgparts -- simple tables partitioning for PostgreSQL
+====================================================
 
 The `pgarts` extension creates partitions on a table and install triggers to
 maintain them. The base table is used as blueprint for the children table,

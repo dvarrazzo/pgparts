@@ -1,3 +1,9 @@
+--
+-- pgparts -- simple tables partitioning for PostgreSQL
+--
+-- Copyright (C) 2014 Daniele Varrazzo <daniele.varrazzo@gmail.com>
+--
+
 -- Tables used to memorize partitioned tables {{{
 
 create table partition_schema (

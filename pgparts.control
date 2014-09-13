@@ -1,5 +1,10 @@
-# pgparts extension
-comment = 'Simple table partitioning for PostgreSQL'
+#
+# pgparts -- simple tables partitioning for PostgreSQL
+#
+# extension control file
+#
+
+comment = 'Simple tables partitioning for PostgreSQL'
 default_version = '0.0.1'
 superuser = true
 relocatable = false
