@@ -238,6 +238,14 @@ begin
 end
 $$;
 
+create function _partitions("table" regclass) returns setof regclass
+language sql as $$
+    select p.partition
+    from @extschema@.partition p
+    join pg_inherits i on p.partition = inhrelid
+    where p.base_table = "table" and inhparent = "table";
+$$;
+
 
 -- }}}
 
@@ -276,27 +284,36 @@ end
 $$;
 
 create function _maintain_insert_function("table" regclass) returns void
+language plpgsql as $$
+declare
+    nparts int;
+begin
+    select count(*) from @extschema@._partitions("table")
+    into nparts;
+
+    if nparts = 0 then
+        perform @extschema@._maintain_insert_function_empty("table");
+    else
+        perform @extschema@._maintain_insert_function_parts("table");
+    end if;
+end
+$$;
+
+create function _maintain_insert_function_empty("table" regclass) returns void
 language plpgsql as $body$
 declare
     schema name = @extschema@._schema_name("table");
     fname name = @extschema@._table_name("table") || '_partition_insert';
     field name;
-    nparts int;
-    checks text;
 begin
-    select t.field, count(p.partition)
-    from @extschema@.partitioned_table t
-    left join @extschema@.partition p on t."table" = p.base_table
-    where t."table" = _maintain_insert_function."table"
-    group by 1
-    into strict field, nparts;
+    select t.field from @extschema@.partitioned_table t
+    where t."table" = _maintain_insert_function_empty."table"
+    into strict field;
 
-    if nparts = 0 then  -----------------------------------
-
-        execute format(
+    execute format(
 $f$
-            create or replace function %I.%I()
-            returns trigger language plpgsql as $$
+        create or replace function %I.%I()
+        returns trigger language plpgsql as $$
 begin
     raise using
         message = 'no partition available on table %I',
@@ -305,26 +322,38 @@ begin
 end
 $$
 $f$,
-            schema, fname, "table", "table", field);
+        schema, fname, "table", "table", field);
+end
+$body$;
 
-    else    -----------------------------------------------
+create function _maintain_insert_function_parts("table" regclass) returns void
+language plpgsql as $body$
+declare
+    schema name = @extschema@._schema_name("table");
+    fname name = @extschema@._table_name("table") || '_partition_insert';
+    field name;
+    checks text;
+begin
+    select t.field from @extschema@.partitioned_table t
+    where t."table" = _maintain_insert_function_parts."table"
+    into strict field;
 
-        with checks(body) as (
-            select format(
+    with checks(body) as (
+        select format(
 $c$
     if %L <= new.%I and new.%I < %L then
         insert into %s values (new.*);
         return null;
     end if;
 $c$,
-                p.start_value, field, field, p.end_value, p.partition)
-            from @extschema@.partition p
-            where p.base_table = "table"
-            order by p.partition::text desc)
-        select array_to_string(array_agg(body), '') from checks
-        into strict checks;
+            p.start_value, field, field, p.end_value, p.partition)
+        from @extschema@.partition p
+        where p.partition in (select @extschema@._partitions("table"))
+        order by p.partition::text desc)
+    select array_to_string(array_agg(body), '') from checks
+    into strict checks;
 
-        execute format(
+    execute format(
 $f$
 create or replace function %I.%I()
 returns trigger language plpgsql as $$
@@ -338,10 +367,9 @@ begin
 end
 $$
 $f$,
-            schema, fname, checks,
-            "table", field, field, "table", field);
+        schema, fname, checks,
+        "table", field, field, "table", field);
 
-    end if; -----------------------------------------------
 end
 $body$;
 
