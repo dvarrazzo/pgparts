@@ -51,3 +51,23 @@ update sometbl set day = '2014-10-15' where id = 100;
 select * from only sometbl;
 select * from only sometbl_201407;
 select * from only sometbl_201410;
+
+-- Detach the partition removes it from writing
+insert into sometbl values (104, '2014-07-10', 'third');
+select partest.detach_for('sometbl', '2014-07-10');
+-- Partition is there but removed from the base table
+select * from sometbl where day = '2014-07-10';
+select * from sometbl_201407 where day = '2014-07-10';
+-- Trigger has been maintained
+insert into sometbl values (105, '2014-07-16', 'fourth');
+insert into sometbl values (106, '2014-10-16', 'fifth');
+-- Idempotent
+select partest.detach_for('sometbl', '2014-07-10');
+-- Can't create the same partition again
+select partest.create_for('sometbl', '2014-07-10');
+-- But can attach it back
+select partest.attach_for('sometbl', '2014-07-10');
+select * from sometbl where day = '2014-07-10';
+insert into sometbl values (105, '2014-07-16', 'fourth');
+-- Idempotent
+select partest.attach_for('sometbl', '2014-07-10');

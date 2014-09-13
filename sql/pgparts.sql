@@ -445,7 +445,12 @@ begin
         elsif info.state = 'present' then
             return info.partition;
         elsif info.state = 'detached' then
-            raise 'the partition % exists but is detached', info.partition;
+            raise using
+                message = format('the partition %s exists but is detached',
+                    info.partition),
+                hint = format('You can attach it back using '
+                        '@extschema@.attach_for(%L, %L).',
+                    "table", value);
         elsif info.state = 'missing' then
             null;
         else
@@ -477,6 +482,51 @@ begin
     return partition;
 end
 $$;
+
+create function detach_for("table" regclass, value text) returns regclass
+language plpgsql as
+$body$
+declare
+    partition regclass = @extschema@.partition_for("table", value);
+begin
+    if partition is null then
+        raise using
+            message = format('there is no %I partition for %L',
+                "table", value);
+    end if;
+
+    if partition in (select @extschema@._partitions("table")) then
+        execute format('alter table %s no inherit %s',
+            partition, "table");
+        perform @extschema@._maintain_insert_function("table");
+    end if;
+
+    return partition;
+end
+$body$;
+
+create function attach_for("table" regclass, value text) returns regclass
+language plpgsql as
+$body$
+declare
+    partition regclass = @extschema@.partition_for("table", value);
+begin
+    if partition is null then
+        raise using
+            message = format('there is no %I partition for %L',
+                "table", value);
+    end if;
+
+    if partition not in (select @extschema@._partitions("table")) then
+        execute format('alter table %s inherit %s',
+            partition, "table");
+        perform @extschema@._maintain_insert_function("table");
+    end if;
+
+    return partition;
+end
+$body$;
+
 
 create function _copy_to_subtable("table" regclass, value text) returns regclass
 language plpgsql as

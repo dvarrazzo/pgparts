@@ -119,3 +119,60 @@ select * from only sometbl_201410;
  100 | 2014-10-15 | first
 (1 row)
 
+-- Detach the partition removes it from writing
+insert into sometbl values (104, '2014-07-10', 'third');
+select partest.detach_for('sometbl', '2014-07-10');
+   detach_for   
+----------------
+ sometbl_201407
+(1 row)
+
+-- Partition is there but removed from the base table
+select * from sometbl where day = '2014-07-10';
+ id | day | data 
+----+-----+------
+(0 rows)
+
+select * from sometbl_201407 where day = '2014-07-10';
+ id  |    day     | data  
+-----+------------+-------
+ 104 | 2014-07-10 | third
+(1 row)
+
+-- Trigger has been maintained
+insert into sometbl values (105, '2014-07-16', 'fourth');
+ERROR:  partition on table sometbl missing for day = '2014-07-16'
+HINT:  You should call partest.create_for('sometbl', '2014-07-16')
+insert into sometbl values (106, '2014-10-16', 'fifth');
+-- Idempotent
+select partest.detach_for('sometbl', '2014-07-10');
+   detach_for   
+----------------
+ sometbl_201407
+(1 row)
+
+-- Can't create the same partition again
+select partest.create_for('sometbl', '2014-07-10');
+ERROR:  the partition sometbl_201407 exists but is detached
+HINT:  You can attach it back using partest.attach_for('sometbl', '2014-07-10').
+-- But can attach it back
+select partest.attach_for('sometbl', '2014-07-10');
+   attach_for   
+----------------
+ sometbl_201407
+(1 row)
+
+select * from sometbl where day = '2014-07-10';
+ id  |    day     | data  
+-----+------------+-------
+ 104 | 2014-07-10 | third
+(1 row)
+
+insert into sometbl values (105, '2014-07-16', 'fourth');
+-- Idempotent
+select partest.attach_for('sometbl', '2014-07-10');
+   attach_for   
+----------------
+ sometbl_201407
+(1 row)
+
