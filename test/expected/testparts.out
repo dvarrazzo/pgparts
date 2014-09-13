@@ -10,6 +10,12 @@ create table "n1.n2"."t1.t2" (
     id serial primary key,
     day date not null,
     data text);
+select * from partest.info('sometbl', '2014-09-15');
+     state     | partition 
+---------------+-----------
+ unpartitioned | 
+(1 row)
+
 select partest.create_for('sometbl', '2014-09-15');
 ERROR:  the table sometbl has not been partitioned yet
 HINT:  You should call partest.setup('sometbl').
@@ -17,6 +23,12 @@ select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
  setup 
 -------
  
+(1 row)
+
+select * from partest.info('sometbl', '2014-09-15');
+  state  | partition 
+---------+-----------
+ missing | 
 (1 row)
 
 -- This insert fails
@@ -32,6 +44,12 @@ select partest.create_for('sometbl', '2014-09-15');
    create_for   
 ----------------
  sometbl_201407
+(1 row)
+
+select * from partest.info('sometbl', '2014-09-15');
+  state  |   partition    
+---------+----------------
+ present | sometbl_201407
 (1 row)
 
 -- Insert

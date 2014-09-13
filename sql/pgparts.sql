@@ -63,50 +63,34 @@ create type partition_state as
 
 create type partition_info as (
     state @extschema@.partition_state,
-    table_schema name,
-    "table" regclass,
-    field name,
-    field_type regtype,
-    schema_name name,
-    schema_params text[],
-    partition regclass,
-    name name);
+    partition regclass);
 
-create function info("table" regclass, name name)
+create function info("table" regclass, value text)
 returns @extschema@.partition_info
 language plpgsql stable as
 $$
 declare
     rv @extschema@.partition_info;
 begin
-    select @extschema@._schema_name(t.oid), t.oid,
-        pt.field, pt.field_type, pt.schema_name, pt.schema_params,
-        case when pt."table" is null then 'unpartitioned' end
-    from pg_class t
-    left join @extschema@.partitioned_table pt on pt."table" = t.oid
-    where t.oid = info."table"
-    into rv.table_schema, rv."table",
-        rv.field, rv.field_type, rv.schema_name, rv.schema_params,
-        rv.state;
-    if rv.state = 'unpartitioned' then
+    perform 1 from @extschema@.partitioned_table pt
+    where pt."table" = info.table;
+    if not found then
+        rv.state = 'unpartitioned';
         return rv;
     end if;
 
-    rv.name := name;
+    rv.partition = @extschema@.partition_for("table", value);
+    if rv.partition is null then
+        rv.state = 'missing';
+        return rv;
+    end if;
 
-    select p.oid,
-        (case when inhparent is not null
-            then 'present' else 'detached' end)::@extschema@.partition_state
-    from pg_class p
-    join pg_namespace n on n.oid = p.relnamespace
-    left join pg_inherits i
-        on inhparent = "table" and inhrelid = p.oid
-    where p.relname = name
-    and nspname = rv.table_schema
-    into rv.partition, rv.state;
-
-    if rv.state is null then
-        rv.state := 'missing';
+    perform 1 from pg_inherits
+    where inhparent = "table" and inhrelid = rv.partition;
+    if found then
+        rv.state = 'present';
+    else
+        rv.state = 'detached';
     end if;
 
     return rv;
@@ -295,10 +279,7 @@ declare
     partition regclass;
 begin
     begin  -- transaction
-        select @extschema@.name_for("table", value) into strict pname;
-
-        -- Check if exists
-        select (@extschema@.info("table", pname)).* into strict info;
+        select (@extschema@.info("table", value)).* into strict info;
         if info.state = 'unpartitioned' then
             raise using
                 message = format('the table %s has not been partitioned yet',
@@ -308,7 +289,7 @@ begin
         elsif info.state = 'present' then
             return info.partition;
         elsif info.state = 'detached' then
-            raise 'the partition % exists but is detached', pname;
+            raise 'the partition % exists but is detached', info.partition;
         elsif info.state = 'missing' then
             null;
         else
@@ -345,7 +326,6 @@ create function _copy_to_subtable("table" regclass, value text) returns regclass
 language plpgsql as
 $$
 declare
-    rv regclass;
     name name = @extschema@.name_for("table", value);
 begin
     execute format ('create table %I.%I () inherits (%s)',
@@ -353,10 +333,7 @@ begin
     -- TODO: inherit the rest
 
     -- Return the oid of the new table
-    select c.oid from pg_class c join pg_namespace n on c.relnamespace = n.oid
-    where (relname, nspname) = (name, @extschema@._schema_name("table"))
-    into strict rv;
-    return rv;
+    return @extschema@.partition_for("table", value);
 end
 $$;
 
@@ -527,6 +504,17 @@ $$
     join @extschema@.partitioned_table cfg on r.oid = cfg."table"
     where cfg."table" = end_for."table";
 $$;
+
+create function partition_for("table" regclass, value text) returns regclass
+language sql as
+$$
+    select c.oid
+    from pg_class c
+    join pg_namespace n on c.relnamespace = n.oid
+    where relname = @extschema@.name_for("table", value)
+    and nspname = @extschema@._schema_name("table");
+$$;
+
 
 -- }}}
 
