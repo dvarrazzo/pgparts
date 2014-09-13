@@ -12,6 +12,9 @@ select * from partest.info('sometbl', '2014-09-15');
 
 select partest.create_for('sometbl', '2014-09-15');
 
+-- We don't know this schema
+select partest.setup('sometbl'::regclass, 'day', 'derp', '{3}');
+
 select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
 select * from partest.info('sometbl', '2014-09-15');
 

@@ -14,6 +14,9 @@ select * from partest.info('sometbl', '2014-09-15');
 select partest.create_for('sometbl', '2014-09-15');
 ERROR:  the table sometbl has not been partitioned yet
 HINT:  You should call partest.setup('sometbl').
+-- We don't know this schema
+select partest.setup('sometbl'::regclass, 'day', 'derp', '{3}');
+ERROR:  partitioning schema derp on type date not known
 select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
  setup 
 -------

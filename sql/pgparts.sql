@@ -271,6 +271,7 @@ create function setup(
 returns void
 language plpgsql as
 $$
+<<block>>
 declare
     field_type regtype;
 begin
@@ -292,6 +293,15 @@ begin
         into field_type;
         if not found then
             raise 'field % not found in table %', field, "table";
+        end if;
+
+        -- Does this partitioning schema exist?
+        perform 1 from @extschema@.partition_schema ps
+            where (ps.field_type, ps.name)
+                = (block.field_type, setup.schema_name);
+        if not found then
+            raise 'partitioning schema % on type % not known',
+                schema_name, field_type;
         end if;
 
         insert into @extschema@.partitioned_table
