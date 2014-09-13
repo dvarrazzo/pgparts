@@ -79,7 +79,7 @@ $$
 declare
     rv @extschema@.partition_info;
 begin
-    select @extschema@.schema_name(t.oid), t.oid,
+    select @extschema@._schema_name(t.oid), t.oid,
         pt.field, pt.field_type, pt.schema_name, pt.schema_params,
         case when pt."table" is null then 'unpartitioned' end
     from pg_class t
@@ -113,13 +113,13 @@ begin
 end
 $$;
 
-create function table_name("table" regclass) returns name
+create function _table_name("table" regclass) returns name
 language sql stable as
 $$
     select relname from pg_class where oid = $1;
 $$;
 
-create function schema_name("table" regclass) returns name
+create function _schema_name("table" regclass) returns name
 language sql stable as
 $$
     select nspname
@@ -153,9 +153,9 @@ begin
             ("table", field, field_type, schema_name, schema_params)
         values ("table", field, field_type, schema_name, schema_params);
 
-        perform @extschema@.maintain_insert_function("table");
-        perform @extschema@.create_insert_trigger("table");
-        perform @extschema@.create_update_function("table");
+        perform @extschema@._maintain_insert_function("table");
+        perform @extschema@._create_insert_trigger("table");
+        perform @extschema@._create_update_function("table");
 
     exception
         -- you can't have this clause empty
@@ -164,11 +164,11 @@ begin
 end
 $$;
 
-create function maintain_insert_function("table" regclass) returns void
+create function _maintain_insert_function("table" regclass) returns void
 language plpgsql as $body$
 declare
-    schema name = @extschema@.schema_name("table");
-    fname name = @extschema@.table_name("table") || '_partition_insert';
+    schema name = @extschema@._schema_name("table");
+    fname name = @extschema@._table_name("table") || '_partition_insert';
     field name;
     nparts int;
     checks text;
@@ -176,7 +176,7 @@ begin
     select t.field, count(p.partition)
     from @extschema@.partitioned_table t
     left join @extschema@.partition p on t."table" = p.base_table
-    where t."table" = maintain_insert_function."table"
+    where t."table" = _maintain_insert_function."table"
     group by 1
     into strict field, nparts;
 
@@ -234,10 +234,10 @@ $f$,
 end
 $body$;
 
-create function create_insert_trigger("table" regclass) returns void
+create function _create_insert_trigger("table" regclass) returns void
 language plpgsql as $body$
 declare
-    fname name = @extschema@.table_name("table") || '_partition_insert';
+    fname name = @extschema@._table_name("table") || '_partition_insert';
     -- It should be the last of the triggers "before"
     -- But don't use a 'zzz' prefix as it clashes with pg_repack
     tname name = 'yyy_partition_insert';
@@ -251,11 +251,11 @@ $body$;
 
 -- The function created is used by triggers on the partitions,
 -- not on the base table
-create function create_update_function("table" regclass) returns void
+create function _create_update_function("table" regclass) returns void
 language plpgsql as $body$
 declare
-    schema name = @extschema@.schema_name("table");
-    fname name = @extschema@.table_name("table") || '_partition_update';
+    schema name = @extschema@._schema_name("table");
+    fname name = @extschema@._table_name("table") || '_partition_update';
     pkey text;
 begin
 
@@ -316,7 +316,7 @@ begin
         end if;
 
         -- Not found: create it
-        select @extschema@.copy_to_subtable("table", value)
+        select @extschema@._copy_to_subtable("table", value)
         into strict partition;
 
         -- Insert the data about the partition in the table; the other
@@ -328,9 +328,9 @@ begin
             @extschema@.start_for("table", value),
             @extschema@.end_for("table", value));
 
-        perform @extschema@.create_partition_update_trigger(partition);
-        perform @extschema@.constraint_partition(partition);
-        perform @extschema@.maintain_insert_function("table");
+        perform @extschema@._create_partition_update_trigger(partition);
+        perform @extschema@._constraint_partition(partition);
+        perform @extschema@._maintain_insert_function("table");
 
     exception
         -- you can't have this clause empty
@@ -341,7 +341,7 @@ begin
 end
 $$;
 
-create function copy_to_subtable("table" regclass, value text) returns regclass
+create function _copy_to_subtable("table" regclass, value text) returns regclass
 language plpgsql as
 $$
 declare
@@ -349,18 +349,18 @@ declare
     name name = @extschema@.name_for("table", value);
 begin
     execute format ('create table %I.%I () inherits (%s)',
-        @extschema@.schema_name("table"), name, "table");
+        @extschema@._schema_name("table"), name, "table");
     -- TODO: inherit the rest
 
     -- Return the oid of the new table
     select c.oid from pg_class c join pg_namespace n on c.relnamespace = n.oid
-    where (relname, nspname) = (name, @extschema@.schema_name("table"))
+    where (relname, nspname) = (name, @extschema@._schema_name("table"))
     into strict rv;
     return rv;
 end
 $$;
 
-create function create_partition_update_trigger(partition regclass) returns void
+create function _create_partition_update_trigger(partition regclass) returns void
 language plpgsql as $f$
 declare
     base_table regclass;
@@ -373,8 +373,8 @@ declare
     tname name = 'yyy_partition_update';
 begin
     select t.field, p.start_value, p.end_value,
-        -- Defined by create_update_function() in setup()
-        @extschema@.table_name(p.base_table) || '_partition_update'
+        -- Defined by _create_update_function() in setup()
+        @extschema@._table_name(p.base_table) || '_partition_update'
     from @extschema@.partition p
     join @extschema@.partitioned_table t on p.base_table = t."table"
     into field, start_value, end_value, fname;
@@ -387,10 +387,10 @@ begin
 end
 $f$;
 
-create function constraint_partition(partition regclass) returns void
+create function _constraint_partition(partition regclass) returns void
 language plpgsql as $f$
 declare
-    partname name := @extschema@.table_name(partition);
+    partname name := @extschema@._table_name(partition);
     field name;
     start_value text;
     end_value text;
@@ -398,7 +398,7 @@ begin
     select t.field, p.start_value, p.end_value
     from @extschema@.partition p
     join @extschema@.partitioned_table t on p.base_table = t."table"
-    where p.partition = constraint_partition.partition
+    where p.partition = _constraint_partition.partition
     into strict field, start_value, end_value;
 
     execute format(
@@ -416,7 +416,7 @@ $f$;
 -- They dispatch the call to the concrete methods defined in the
 -- partition_schema records.
 
-create function value2key(
+create function _value2key(
     field_type regtype, schema_name name, params text[], value text)
 returns text language plpgsql stable as $$
 declare
@@ -424,7 +424,8 @@ declare
     rv text;
 begin
     select v.value2key from @extschema@._schema_vtable v
-    where (v.field_type, v.name) = (value2key.field_type, value2key.schema_name)
+    where (v.field_type, v.name)
+        = (_value2key.field_type, _value2key.schema_name)
     into strict value2key;
 
     execute 'select ' || value2key || '($1, $2::' || field_type || ')'
@@ -433,7 +434,7 @@ begin
 end
 $$;
 
-create function value2name(
+create function _value2name(
     field_type regtype, schema_name name, params text[],
     value text, base_name name)
 returns name language plpgsql stable as $$
@@ -444,7 +445,7 @@ declare
 begin
     select v.value2key, v.key2name from @extschema@._schema_vtable v
     where (v.field_type, v.name)
-        = (value2name.field_type, value2name.schema_name)
+        = (_value2name.field_type, _value2name.schema_name)
     into strict value2key, key2name;
 
     execute 'select ' || key2name
@@ -457,7 +458,7 @@ $$;
 create function name_for("table" regclass, value text) returns name
 language sql stable as
 $$
-    select @extschema@.value2name(
+    select @extschema@._value2name(
         cfg.field_type, cfg.schema_name, cfg.schema_params,
         value, relname)
     from pg_class r
@@ -466,7 +467,7 @@ $$
 $$;
 
 
-create function value2start(
+create function _value2start(
     field_type regtype, schema_name name, params text[], value text)
 returns name language plpgsql stable as $$
 declare
@@ -476,7 +477,7 @@ declare
 begin
     select v.value2key, v.key2start from @extschema@._schema_vtable v
     where (v.field_type, v.name)
-        = (value2start.field_type, value2start.schema_name)
+        = (_value2start.field_type, _value2start.schema_name)
     into strict value2key, key2start;
 
     execute 'select ' || key2start
@@ -489,7 +490,7 @@ $$;
 create function start_for("table" regclass, value text) returns name
 language sql stable as
 $$
-    select @extschema@.value2start(
+    select @extschema@._value2start(
         cfg.field_type, cfg.schema_name, cfg.schema_params, value)
     from pg_class r
     join @extschema@.partitioned_table cfg on r.oid = cfg."table"
@@ -497,7 +498,7 @@ $$
 $$;
 
 
-create function value2end(
+create function _value2end(
     field_type regtype, schema_name name, params text[], value text)
 returns name language plpgsql stable as $$
 declare
@@ -507,7 +508,7 @@ declare
 begin
     select v.value2key, v.key2end from @extschema@._schema_vtable v
     where (v.field_type, v.name)
-        = (value2end.field_type, value2end.schema_name)
+        = (_value2end.field_type, _value2end.schema_name)
     into strict value2key, key2end;
 
     execute 'select ' || key2end
@@ -520,7 +521,7 @@ $$;
 create function end_for("table" regclass, value text) returns name
 language sql stable as
 $$
-    select @extschema@.value2end(
+    select @extschema@._value2end(
         cfg.field_type, cfg.schema_name, cfg.schema_params, value)
     from pg_class r
     join @extschema@.partitioned_table cfg on r.oid = cfg."table"
@@ -531,14 +532,14 @@ $$;
 
 -- Partitioning schemas implementations {{{
 
-create function month2key(params text[], value date) returns int
+create function _month2key(params text[], value date) returns int
 language sql stable as
 $$
     select ((12 * date_part('year', $2) + date_part('month', $2) - 1)::int
         / params[1]::int) * params[1]::int;
 $$;
 
-create function month2start(params text[], key text) returns date
+create function _month2start(params text[], key text) returns date
 language sql stable as
 $$
     select ('0001-01-01'::date
@@ -546,17 +547,17 @@ $$
         - '1 year'::interval)::date;
 $$;
 
-create function month2end(params text[], key text) returns date
+create function _month2end(params text[], key text) returns date
 language sql stable as $$
-    select (@extschema@.month2start(params, key)
+    select (@extschema@._month2start(params, key)
         + '1 month'::interval * params[1]::int)::date;
 $$;
 
-create function month2name(params text[], key text, base_name name) returns name
-language sql stable as
+create function _month2name(params text[], key text, base_name name)
+returns name language sql stable as
 $$
     select (base_name || '_'
-        || to_char(@extschema@.month2start(params, key), 'YYYYMM'))::name;
+        || to_char(@extschema@._month2start(params, key), 'YYYYMM'))::name;
 $$;
 
 insert into partition_schema values (
@@ -571,7 +572,7 @@ $$);
 
 insert into _schema_vtable values (
     'date'::regtype, 'monthly',
-    '@extschema@.month2key', '@extschema@.month2name',
-    '@extschema@.month2start', '@extschema@.month2end');
+    '@extschema@._month2key', '@extschema@._month2name',
+    '@extschema@._month2start', '@extschema@._month2end');
 
 -- }}}
