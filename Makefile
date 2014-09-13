@@ -3,7 +3,7 @@ EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/def
 
 DATA         = $(filter-out $(wildcard sql/*--*.sql),$(wildcard sql/*.sql))
 DOCS         = $(wildcard doc/*.rst)
-REGRESS      = testparts
+REGRESS      = testparts badnames
 REGRESS_OPTS = --inputdir=test --load-language=plpgsql
 #
 # Uncoment the MODULES line if you are adding C files

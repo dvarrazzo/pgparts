@@ -3,14 +3,7 @@ set datestyle = 'ISO';
 
 create extension pgparts with schema partest;
 
-create schema "n1.n2";
-
 create table sometbl (
-    id serial primary key,
-    day date not null,
-    data text);
-
-create table "n1.n2"."t1.t2" (
     id serial primary key,
     day date not null,
     data text);
@@ -59,15 +52,17 @@ select partest.detach_for('sometbl', '2014-07-10');
 select * from sometbl where day = '2014-07-10';
 select * from sometbl_201407 where day = '2014-07-10';
 -- Trigger has been maintained
-insert into sometbl values (105, '2014-07-16', 'fourth');
-insert into sometbl values (106, '2014-10-16', 'fifth');
+insert into sometbl values (105, '2014-07-10', 'fourth');
+insert into sometbl values (106, '2014-10-10', 'fifth');
 -- Idempotent
 select partest.detach_for('sometbl', '2014-07-10');
 -- Can't create the same partition again
 select partest.create_for('sometbl', '2014-07-10');
 -- But can attach it back
 select partest.attach_for('sometbl', '2014-07-10');
-select * from sometbl where day = '2014-07-10';
-insert into sometbl values (105, '2014-07-16', 'fourth');
+insert into sometbl values (105, '2014-07-10', 'fourth');
+select * from sometbl where day = '2014-07-10' order by id;
 -- Idempotent
 select partest.attach_for('sometbl', '2014-07-10');
+
+drop extension pgparts;

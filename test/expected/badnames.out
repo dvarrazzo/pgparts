@@ -1,0 +1,149 @@
+set datestyle = 'ISO';
+create schema "s1.s2";
+create extension pgparts with schema "s1.s2";
+create schema "s3.s4";
+create table "s3.s4"."t1.t2" (
+    id serial primary key,
+    "f1.f2" date not null,
+    data text);
+select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
+     state     | partition 
+---------------+-----------
+ unpartitioned | 
+(1 row)
+
+select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
+ERROR:  the table "s3.s4"."t1.t2" has not been partitioned yet
+HINT:  You should call "s1.s2".setup('"s3.s4"."t1.t2"').
+select "s1.s2".setup('"s3.s4"."t1.t2"'::regclass, 'f1.f2', 'monthly', '{3}');
+ setup 
+-------
+ 
+(1 row)
+
+select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
+  state  | partition 
+---------+-----------
+ missing | 
+(1 row)
+
+insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');
+ERROR:  no partition available on table "s3.s4"."t1.t2"
+HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15')
+select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
+       create_for       
+------------------------
+ "s3.s4"."t1.t2_201407"
+(1 row)
+
+select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
+  state  |       partition        
+---------+------------------------
+ present | "s3.s4"."t1.t2_201407"
+(1 row)
+
+insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');
+select * from only "s3.s4"."t1.t2";
+ id | f1.f2 | data 
+----+-------+------
+(0 rows)
+
+select * from only "s3.s4"."t1.t2_201407";
+ id  |   f1.f2    | data  
+-----+------------+-------
+ 100 | 2014-09-15 | first
+(1 row)
+
+-- Update, no partition change
+update "s3.s4"."t1.t2" set "f1.f2" = '2014-8-15' where id = 100;
+select * from only "s3.s4"."t1.t2";
+ id | f1.f2 | data 
+----+-------+------
+(0 rows)
+
+select * from only "s3.s4"."t1.t2_201407";
+ id  |   f1.f2    | data  
+-----+------------+-------
+ 100 | 2014-08-15 | first
+(1 row)
+
+-- Update to fail partition
+update "s3.s4"."t1.t2" set "f1.f2" = '2014-10-15' where id = 100;
+ERROR:  partition on table "s3.s4"."t1.t2" missing for "f1.f2" = '2014-10-15'
+HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-10-15')
+CONTEXT:  SQL statement "insert into "s3.s4"."t1.t2" values (new.*)"
+PL/pgSQL function "s3.s4"."t1.t2_partition_update"() line 4 at SQL statement
+select * from only "s3.s4"."t1.t2";
+ id | f1.f2 | data 
+----+-------+------
+(0 rows)
+
+select * from only "s3.s4"."t1.t2_201407";
+ id  |   f1.f2    | data  
+-----+------------+-------
+ 100 | 2014-08-15 | first
+(1 row)
+
+-- Create the missing partition and try again
+select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-10-15');
+       create_for       
+------------------------
+ "s3.s4"."t1.t2_201410"
+(1 row)
+
+update "s3.s4"."t1.t2" set "f1.f2" = '2014-10-15' where id = 100;
+select * from only "s3.s4"."t1.t2";
+ id | f1.f2 | data 
+----+-------+------
+(0 rows)
+
+select * from only "s3.s4"."t1.t2_201407";
+ id | f1.f2 | data 
+----+-------+------
+(0 rows)
+
+select * from only "s3.s4"."t1.t2_201410";
+ id  |   f1.f2    | data  
+-----+------------+-------
+ 100 | 2014-10-15 | first
+(1 row)
+
+-- Detach the partition removes it from writing
+insert into "s3.s4"."t1.t2" values (104, '2014-07-10', 'third');
+select "s1.s2".detach_for('"s3.s4"."t1.t2"', '2014-07-10');
+       detach_for       
+------------------------
+ "s3.s4"."t1.t2_201407"
+(1 row)
+
+-- Partition is there but removed from the base table
+select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10';
+ id | f1.f2 | data 
+----+-------+------
+(0 rows)
+
+-- Trigger has been maintained
+insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
+ERROR:  partition on table "s3.s4"."t1.t2" missing for "f1.f2" = '2014-07-10'
+HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-07-10')
+insert into "s3.s4"."t1.t2" values (106, '2014-10-10', 'fifth');
+-- Can't create the same partition again
+select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-07-10');
+ERROR:  the partition "s3.s4"."t1.t2_201407" exists but is detached
+HINT:  You can attach it back using "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10').
+-- But can attach it back
+select "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10');
+       attach_for       
+------------------------
+ "s3.s4"."t1.t2_201407"
+(1 row)
+
+insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
+select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10' order by id;
+ id  |   f1.f2    |  data  
+-----+------------+--------
+ 104 | 2014-07-10 | third
+ 105 | 2014-07-10 | fourth
+(2 rows)
+
+drop extension pgparts;

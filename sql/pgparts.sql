@@ -316,7 +316,7 @@ $f$
         returns trigger language plpgsql as $$
 begin
     raise using
-        message = 'no partition available on table %I',
+        message = 'no partition available on table %s',
         hint = format(
             $m$You should call @extschema@.create_for(%L, %%L)$m$, new.%I);
 end
@@ -361,7 +361,7 @@ begin
 %s
     raise using
         message = format(
-            $m$partition on table %I missing for %I = %%L$m$, new.%I),
+            $m$partition on table %s missing for %I = %%L$m$, new.%I),
         hint = format(
             $m$You should call @extschema@.create_for(%L, %%L)$m$, new.%I);
 end
@@ -376,6 +376,7 @@ $body$;
 create function _create_insert_trigger("table" regclass) returns void
 language plpgsql as $body$
 declare
+    sname name = @extschema@._schema_name("table");
     fname name = @extschema@._table_name("table") || '_partition_insert';
     -- It should be the last of the triggers "before"
     -- But don't use a 'zzz' prefix as it clashes with pg_repack
@@ -383,8 +384,8 @@ declare
 begin
     execute format($t$
         create trigger %I before insert on %s
-        for each row execute procedure %s();
-        $t$, tname, "table", fname);
+        for each row execute procedure %I.%I();
+        $t$, tname, "table", sname, fname);
 end
 $body$;
 
@@ -551,22 +552,24 @@ declare
     start_value text;
     end_value text;
     fname name;
+    sname name;
     -- It should be the last of the triggers "before"
     -- But don't use a 'zzz' prefix as it clashes with pg_repack
     tname name = 'yyy_partition_update';
 begin
     select t.field, p.start_value, p.end_value,
         -- Defined by _create_update_function() in setup()
-        @extschema@._table_name(p.base_table) || '_partition_update'
+        @extschema@._table_name(p.base_table) || '_partition_update',
+        @extschema@._schema_name(p.base_table)
     from @extschema@.partition p
     join @extschema@.partitioned_table t on p.base_table = t."table"
-    into field, start_value, end_value, fname;
+    into field, start_value, end_value, fname, sname;
 
     execute format($t$
         create trigger %I before update on %s
         for each row when (not (%L <= new.%I and new.%I < %L))
-        execute procedure %s();
-        $t$, tname, partition, start_value, field, field, end_value, fname);
+        execute procedure %I.%I();
+        $t$, tname, partition, start_value, field, field, end_value, sname, fname);
 end
 $f$;
 
@@ -585,7 +588,7 @@ begin
     into strict field, start_value, end_value;
 
     execute format(
-        'alter table %I add constraint %I check (%L <= %I and %I < %L)',
+        'alter table %s add constraint %I check (%L <= %I and %I < %L)',
         partition, partname || '_partition_chk',
         start_value, field, field, end_value);
 end
