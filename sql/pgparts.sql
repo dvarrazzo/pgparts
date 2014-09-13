@@ -488,8 +488,8 @@ begin
             @extschema@.start_for("table", value),
             @extschema@.end_for("table", value));
 
-        perform @extschema@._create_partition_update_trigger(partition);
         perform @extschema@._constraint_partition(partition);
+        perform @extschema@._create_partition_update_trigger(partition);
         perform @extschema@._maintain_insert_function("table");
 
     exception
@@ -580,7 +580,8 @@ begin
         @extschema@._schema_name(p.base_table)
     from @extschema@.partition p
     join @extschema@.partitioned_table t on p.base_table = t."table"
-    into field, start_value, end_value, fname, sname;
+    where p.partition = _create_partition_update_trigger.partition
+    into strict field, start_value, end_value, fname, sname;
 
     execute format($t$
         create trigger %I before update on %s
