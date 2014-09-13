@@ -9,21 +9,6 @@ create table partition_schema (
     description text
 );
 
-create table _schema_vtable (
-    -- vtable
-    field_type regtype,
-    name name,
-    primary key (field_type, name),
-    foreign key (field_type, name)
-        references partition_schema (field_type, name)
-        on update cascade on delete cascade,
-
-    value2key name not null,
-    key2name name not null,
-    key2start name not null,
-    key2end name not null
-);
-
 comment on table partition_schema is
     'The partitioning schemas the system knows';
 
@@ -56,7 +41,163 @@ comment on table partition is
 
 -- }}}
 
+-- Virtual methods dispatch {{{
+
+create table _schema_vtable (
+    field_type regtype,
+    name name,
+    primary key (field_type, name),
+    foreign key (field_type, name)
+        references partition_schema (field_type, name)
+        on update cascade on delete cascade,
+
+    value2key name not null,
+    key2name name not null,
+    key2start name not null,
+    key2end name not null
+);
+
+
+create function _value2key(
+    field_type regtype, schema_name name, params text[], value text)
+returns text language plpgsql stable as $$
+declare
+    value2key text;
+    rv text;
+begin
+    select v.value2key from @extschema@._schema_vtable v
+    where (v.field_type, v.name)
+        = (_value2key.field_type, _value2key.schema_name)
+    into strict value2key;
+
+    execute 'select ' || value2key || '($1, $2::' || field_type || ')'
+    into strict rv using params, value;
+    return rv;
+end
+$$;
+
+create function _value2name(
+    field_type regtype, schema_name name, params text[],
+    value text, base_name name)
+returns name language plpgsql stable as $$
+declare
+    value2key text;
+    key2name text;
+    rv text;
+begin
+    select v.value2key, v.key2name from @extschema@._schema_vtable v
+    where (v.field_type, v.name)
+        = (_value2name.field_type, _value2name.schema_name)
+    into strict value2key, key2name;
+
+    execute 'select ' || key2name
+        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text, $3)'
+    into strict rv using params, value, base_name;
+    return rv;
+end
+$$;
+
+create function _value2start(
+    field_type regtype, schema_name name, params text[], value text)
+returns name language plpgsql stable as $$
+declare
+    value2key text;
+    key2start text;
+    rv text;
+begin
+    select v.value2key, v.key2start from @extschema@._schema_vtable v
+    where (v.field_type, v.name)
+        = (_value2start.field_type, _value2start.schema_name)
+    into strict value2key, key2start;
+
+    execute 'select ' || key2start
+        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text)'
+    into strict rv using params, value;
+    return rv;
+end
+$$;
+
+create function _value2end(
+    field_type regtype, schema_name name, params text[], value text)
+returns name language plpgsql stable as $$
+declare
+    value2key text;
+    key2end text;
+    rv text;
+begin
+    select v.value2key, v.key2end from @extschema@._schema_vtable v
+    where (v.field_type, v.name)
+        = (_value2end.field_type, _value2end.schema_name)
+    into strict value2key, key2end;
+
+    execute 'select ' || key2end
+        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text)'
+    into strict rv using params, value;
+    return rv;
+end
+$$;
+
+
+-- }}}
+
 -- Informative functions {{{
+
+create function _table_name("table" regclass) returns name
+language sql stable as
+$$
+    select relname from pg_class where oid = $1;
+$$;
+
+create function _schema_name("table" regclass) returns name
+language sql stable as
+$$
+    select nspname
+    from pg_class c
+    join pg_namespace n on n.oid = relnamespace
+    where c.oid = $1;
+$$;
+
+create function name_for("table" regclass, value text) returns name
+language sql stable as
+$$
+    select @extschema@._value2name(
+        cfg.field_type, cfg.schema_name, cfg.schema_params,
+        value, relname)
+    from pg_class r
+    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
+    where cfg."table" = name_for."table";
+$$;
+
+create function start_for("table" regclass, value text) returns name
+language sql stable as
+$$
+    select @extschema@._value2start(
+        cfg.field_type, cfg.schema_name, cfg.schema_params, value)
+    from pg_class r
+    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
+    where cfg."table" = start_for."table";
+$$;
+
+create function end_for("table" regclass, value text) returns name
+language sql stable as
+$$
+    select @extschema@._value2end(
+        cfg.field_type, cfg.schema_name, cfg.schema_params, value)
+    from pg_class r
+    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
+    where cfg."table" = end_for."table";
+$$;
+
+create function partition_for("table" regclass, value text) returns regclass
+language sql as
+$$
+    select c.oid
+    from pg_class c
+    join pg_namespace n on c.relnamespace = n.oid
+    where relname = @extschema@.name_for("table", value)
+    and nspname = @extschema@._schema_name("table");
+$$;
+
 
 create type partition_state as
     enum ('unpartitioned', 'missing', 'present', 'detached');
@@ -97,20 +238,6 @@ begin
 end
 $$;
 
-create function _table_name("table" regclass) returns name
-language sql stable as
-$$
-    select relname from pg_class where oid = $1;
-$$;
-
-create function _schema_name("table" regclass) returns name
-language sql stable as
-$$
-    select nspname
-    from pg_class c
-    join pg_namespace n on n.oid = relnamespace
-    where c.oid = $1;
-$$;
 
 -- }}}
 
@@ -266,6 +393,7 @@ $$
 end
 $body$;
 
+
 -- }}}
 
 -- Setting up a partition {{{
@@ -385,136 +513,6 @@ begin
 end
 $f$;
 
--- }}}
-
--- Virtual methods dispatch {{{
-
--- These are the 'virtual methods' of the methods defined by partition_schema.
--- They dispatch the call to the concrete methods defined in the
--- partition_schema records.
-
-create function _value2key(
-    field_type regtype, schema_name name, params text[], value text)
-returns text language plpgsql stable as $$
-declare
-    value2key text;
-    rv text;
-begin
-    select v.value2key from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
-        = (_value2key.field_type, _value2key.schema_name)
-    into strict value2key;
-
-    execute 'select ' || value2key || '($1, $2::' || field_type || ')'
-    into strict rv using params, value;
-    return rv;
-end
-$$;
-
-create function _value2name(
-    field_type regtype, schema_name name, params text[],
-    value text, base_name name)
-returns name language plpgsql stable as $$
-declare
-    value2key text;
-    key2name text;
-    rv text;
-begin
-    select v.value2key, v.key2name from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
-        = (_value2name.field_type, _value2name.schema_name)
-    into strict value2key, key2name;
-
-    execute 'select ' || key2name
-        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text, $3)'
-    into strict rv using params, value, base_name;
-    return rv;
-end
-$$;
-
-create function name_for("table" regclass, value text) returns name
-language sql stable as
-$$
-    select @extschema@._value2name(
-        cfg.field_type, cfg.schema_name, cfg.schema_params,
-        value, relname)
-    from pg_class r
-    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
-    where cfg."table" = name_for."table";
-$$;
-
-
-create function _value2start(
-    field_type regtype, schema_name name, params text[], value text)
-returns name language plpgsql stable as $$
-declare
-    value2key text;
-    key2start text;
-    rv text;
-begin
-    select v.value2key, v.key2start from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
-        = (_value2start.field_type, _value2start.schema_name)
-    into strict value2key, key2start;
-
-    execute 'select ' || key2start
-        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text)'
-    into strict rv using params, value;
-    return rv;
-end
-$$;
-
-create function start_for("table" regclass, value text) returns name
-language sql stable as
-$$
-    select @extschema@._value2start(
-        cfg.field_type, cfg.schema_name, cfg.schema_params, value)
-    from pg_class r
-    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
-    where cfg."table" = start_for."table";
-$$;
-
-
-create function _value2end(
-    field_type regtype, schema_name name, params text[], value text)
-returns name language plpgsql stable as $$
-declare
-    value2key text;
-    key2end text;
-    rv text;
-begin
-    select v.value2key, v.key2end from @extschema@._schema_vtable v
-    where (v.field_type, v.name)
-        = (_value2end.field_type, _value2end.schema_name)
-    into strict value2key, key2end;
-
-    execute 'select ' || key2end
-        || '($1, ' || value2key || '($1, $2::' || field_type || ')::text)'
-    into strict rv using params, value;
-    return rv;
-end
-$$;
-
-create function end_for("table" regclass, value text) returns name
-language sql stable as
-$$
-    select @extschema@._value2end(
-        cfg.field_type, cfg.schema_name, cfg.schema_params, value)
-    from pg_class r
-    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
-    where cfg."table" = end_for."table";
-$$;
-
-create function partition_for("table" regclass, value text) returns regclass
-language sql as
-$$
-    select c.oid
-    from pg_class c
-    join pg_namespace n on c.relnamespace = n.oid
-    where relname = @extschema@.name_for("table", value)
-    and nspname = @extschema@._schema_name("table");
-$$;
-
 
 -- }}}
 
@@ -562,5 +560,6 @@ insert into _schema_vtable values (
     'date'::regtype, 'monthly',
     '@extschema@._month2key', '@extschema@._month2name',
     '@extschema@._month2start', '@extschema@._month2end');
+
 
 -- }}}
