@@ -162,4 +162,28 @@ drop user u1;
 drop user u2;
 drop user u3;
 
+-- Monthly timestamp
+create table monthts (id serial primary key, ts timestamp);
+select partest.setup('monthts', 'ts', 'monthly', '{1}');
+select partest.create_for('monthts', '2014-09-01');
+select partest.create_for('monthts', '2014-10-01');
+insert into monthts(ts) values ('2014-08-31T23:59:59.999');
+insert into monthts(ts) values ('2014-09-01');
+insert into monthts(ts) values ('2014-09-30T23:59:59.999');
+insert into monthts(ts) values ('2014-10-01');
+insert into monthts(ts) values ('2014-10-31T23:59:59.999');
+insert into monthts(ts) values ('2014-11-01');
+
+-- Monthly timestamptz
+create table monthtstz (id serial primary key, ts timestamptz);
+select partest.setup('monthtstz', 'ts', 'monthly', '{1}');
+select partest.create_for('monthtstz', '2014-09-01');
+select partest.create_for('monthtstz', '2014-10-01');
+insert into monthtstz(ts) values ('2014-08-31T23:59:59.999');
+insert into monthtstz(ts) values ('2014-09-01');
+insert into monthtstz(ts) values ('2014-09-30T23:59:59.999');
+insert into monthtstz(ts) values ('2014-10-01');
+insert into monthtstz(ts) values ('2014-10-31T23:59:59.999');
+insert into monthtstz(ts) values ('2014-11-01');
+
 drop extension pgparts;

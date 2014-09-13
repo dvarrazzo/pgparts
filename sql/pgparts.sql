@@ -805,7 +805,7 @@ $f$;
 
 -- Partitioning schemas implementations {{{
 
-create function _month2key(params text[], value date) returns int
+create function _month2key(params text[], value timestamptz) returns int
 language sql stable as
 $$
     select ((12 * date_part('year', $2) + date_part('month', $2) - 1)::int
@@ -848,5 +848,24 @@ insert into _schema_vtable values (
     '@extschema@._month2key', '@extschema@._month2name',
     '@extschema@._month2start', '@extschema@._month2end');
 
+insert into partition_schema values (
+    'timestamp'::regtype, 'monthly', '{months_per_partiton}',
+$$TODO: maybe separate data type?$$);
+
+insert into _schema_vtable values (
+    'timestamp'::regtype, 'monthly',
+    '@extschema@._month2key', '@extschema@._month2name',
+    '@extschema@._month2start', '@extschema@._month2end');
+
+insert into partition_schema values (
+    'timestamptz'::regtype, 'monthly', '{months_per_partiton}',
+$$TODO: maybe separate data type?$$);
+
+insert into _schema_vtable values (
+    'timestamptz'::regtype, 'monthly',
+    '@extschema@._month2key', '@extschema@._month2name',
+    '@extschema@._month2start', '@extschema@._month2end');
+
 
 -- }}}
+

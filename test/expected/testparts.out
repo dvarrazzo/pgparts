@@ -352,4 +352,64 @@ reset client_min_messages;
 drop user u1;
 drop user u2;
 drop user u3;
+-- Monthly timestamp
+create table monthts (id serial primary key, ts timestamp);
+select partest.setup('monthts', 'ts', 'monthly', '{1}');
+ setup 
+-------
+ 
+(1 row)
+
+select partest.create_for('monthts', '2014-09-01');
+   create_for   
+----------------
+ monthts_201409
+(1 row)
+
+select partest.create_for('monthts', '2014-10-01');
+   create_for   
+----------------
+ monthts_201410
+(1 row)
+
+insert into monthts(ts) values ('2014-08-31T23:59:59.999');
+ERROR:  partition on table monthts missing for ts = '2014-08-31 23:59:59.999'
+HINT:  You should call partest.create_for('monthts', '2014-08-31 23:59:59.999').
+insert into monthts(ts) values ('2014-09-01');
+insert into monthts(ts) values ('2014-09-30T23:59:59.999');
+insert into monthts(ts) values ('2014-10-01');
+insert into monthts(ts) values ('2014-10-31T23:59:59.999');
+insert into monthts(ts) values ('2014-11-01');
+ERROR:  partition on table monthts missing for ts = '2014-11-01 00:00:00'
+HINT:  You should call partest.create_for('monthts', '2014-11-01 00:00:00').
+-- Monthly timestamptz
+create table monthtstz (id serial primary key, ts timestamptz);
+select partest.setup('monthtstz', 'ts', 'monthly', '{1}');
+ setup 
+-------
+ 
+(1 row)
+
+select partest.create_for('monthtstz', '2014-09-01');
+    create_for    
+------------------
+ monthtstz_201409
+(1 row)
+
+select partest.create_for('monthtstz', '2014-10-01');
+    create_for    
+------------------
+ monthtstz_201410
+(1 row)
+
+insert into monthtstz(ts) values ('2014-08-31T23:59:59.999');
+ERROR:  partition on table monthtstz missing for ts = '2014-08-31 23:59:59.999-07'
+HINT:  You should call partest.create_for('monthtstz', '2014-08-31 23:59:59.999-07').
+insert into monthtstz(ts) values ('2014-09-01');
+insert into monthtstz(ts) values ('2014-09-30T23:59:59.999');
+insert into monthtstz(ts) values ('2014-10-01');
+insert into monthtstz(ts) values ('2014-10-31T23:59:59.999');
+insert into monthtstz(ts) values ('2014-11-01');
+ERROR:  partition on table monthtstz missing for ts = '2014-11-01 00:00:00-07'
+HINT:  You should call partest.create_for('monthtstz', '2014-11-01 00:00:00-07').
 drop extension pgparts;
