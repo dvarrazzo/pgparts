@@ -28,6 +28,10 @@ create table _schema_vtable (
     field_type regtype,
     primary key (schema_name, field_type),
 
+    -- TODO: implement other partitioning strategies, not only by range:
+    -- at least by identity. By hash is not worth: partitions are good to
+    -- rotate stuff away, hashes to distribute. You better use PL/Proxy.
+
     value2key name not null,
     key2name name not null,
     key2start name not null,
