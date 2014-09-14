@@ -265,6 +265,7 @@ $$;
 
 -- Setting up a partitioned table {{{
 
+-- TODO: should take named params
 create function setup(
     "table" regclass, field name, schema_name name, schema_params text[])
 returns void
@@ -318,6 +319,7 @@ begin
 end
 $$;
 
+-- TODO: implement bisection access (should be a partitioned table param)
 create function _maintain_insert_function("table" regclass) returns void
 language plpgsql as $$
 declare
@@ -804,6 +806,8 @@ $f$;
 
 -- Partitioning schemas implementations {{{
 
+-- TODO: fix timezones! At least UTF, maybe a zone param. Note that regression
+-- test is performed in a "strange" timezone: see resulting tables' checks.
 create function _month2key(params text[], value timestamptz) returns int
 language sql stable as
 $$
