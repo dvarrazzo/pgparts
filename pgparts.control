@@ -6,6 +6,6 @@
 
 comment = 'Simple tables partitioning for PostgreSQL'
 default_version = '0.0.1'
-superuser = true
+superuser = false
 relocatable = false
 requires = 'plpgsql'
