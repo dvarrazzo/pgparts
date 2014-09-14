@@ -17,6 +17,8 @@ create table partition_schema (
 comment on table partition_schema is
     'The partitioning schemas the system knows';
 
+-- TODO: allow user-defined partition schemas to be dumped
+
 
 create table _schema_vtable (
     schema_name name,
@@ -48,6 +50,9 @@ create table partitioned_table (
 comment on table partitioned_table is
     'The partitioning parameters for the tables prepared to create partitions';
 
+-- Include in pg_dump
+select pg_catalog.pg_extension_config_dump('partitioned_table', '');
+
 
 create table partition (
     partition regclass primary key,
@@ -57,6 +62,8 @@ create table partition (
 
 comment on table partition is
     'The ranges covered by the single partitions';
+
+select pg_catalog.pg_extension_config_dump('partition', '');
 
 
 -- }}}
