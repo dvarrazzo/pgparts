@@ -858,5 +858,65 @@ insert into _schema_vtable values (
     '@extschema@._month2start', '@extschema@._month2end');
 
 
+create function _day2key(params text[], value timestamptz) returns int
+language sql stable as
+$$
+    -- The 3 makes weekly partitions starting on Sunday with offset 0
+    -- which is consistent with extract(dow), if anything.
+    select (((value::date - 'epoch'::date)::int
+            - coalesce(params[2]::int, 0) - 3)
+        / coalesce(params[1]::int, 1)) * coalesce(params[1]::int, 1);
+$$;
+
+create function _day2start(params text[], key int) returns date
+language sql stable as
+$$
+    select ('epoch'::date + '1 day'::interval
+        * (key + 3 + coalesce(params[2]::int, 0)))::date;
+$$;
+
+create function _day2end(params text[], key int) returns date
+language sql stable as $$
+    select (@extschema@._day2start(params, key)
+        + '1 day'::interval * params[1]::int)::date;
+$$;
+
+create function _day2name(params text[], key int, base_name name)
+returns name language sql stable as
+$$
+    select (base_name || '_'
+        || to_char(@extschema@._day2start(params, key), 'YYYYMMDD'))::name;
+$$;
+
+insert into partition_schema values (
+    'daily', '{days_per_partiton,weeks_start_on}',
+$$Each partition of the table contains 'days_per_partiton' days (default 1).
+
+If days_per_partiton = 7 the partitions will start on Sunday. You can change it
+setting a value to weeks_start_on: as is extract('dow' from date) Sunday is
+0, Saturday is 6.
+
+The partitioning triggers checks the partitions from the newest to the oldest
+so, if normal inserts happens in order of time, dispatching to the right
+partition should be o(1), whereas for random inserts dispatching is o(n) in the
+number of partitions.
+$$);
+
+insert into _schema_vtable values (
+    'daily', 'date'::regtype,
+    '@extschema@._day2key', '@extschema@._day2name',
+    '@extschema@._day2start', '@extschema@._day2end');
+
+insert into _schema_vtable values (
+    'daily', 'timestamp'::regtype,
+    '@extschema@._day2key', '@extschema@._day2name',
+    '@extschema@._day2start', '@extschema@._day2end');
+
+insert into _schema_vtable values (
+    'daily', 'timestamptz'::regtype,
+    '@extschema@._day2key', '@extschema@._day2name',
+    '@extschema@._day2start', '@extschema@._day2end');
+
+
 -- }}}
 

@@ -186,4 +186,28 @@ insert into monthtstz(ts) values ('2014-10-01');
 insert into monthtstz(ts) values ('2014-10-31T23:59:59.999');
 insert into monthtstz(ts) values ('2014-11-01');
 
+-- Daily date
+create table days (id serial primary key, ts timestamptz);
+select partest.setup('days', 'ts', 'daily', '{1}');
+select partest.create_for('days', '2014-09-01');
+select partest.create_for('days', '2014-09-02');
+insert into days(ts) values ('2014-08-31T23:59:59.999');
+insert into days(ts) values ('2014-09-01');
+insert into days(ts) values ('2014-09-01T23:59:59.999');
+insert into days(ts) values ('2014-09-02');
+insert into days(ts) values ('2014-09-02T23:59:59.999');
+insert into days(ts) values ('2014-09-03');
+
+-- Weeks starting on Saturdays
+create table weeks (id serial primary key, ts date);
+select partest.setup('weeks', 'ts', 'daily', '{7,6}');
+select partest.create_for('weeks', '2014-09-12');
+select partest.create_for('weeks', '2014-09-13');
+insert into weeks(ts) values ('2014-09-05');
+insert into weeks(ts) values ('2014-09-06');
+insert into weeks(ts) values ('2014-09-12');
+insert into weeks(ts) values ('2014-09-13');
+insert into weeks(ts) values ('2014-09-19');
+insert into weeks(ts) values ('2014-09-20');
+
 drop extension pgparts;
