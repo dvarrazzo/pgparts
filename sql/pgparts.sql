@@ -588,7 +588,8 @@ begin
         @extschema@._schema_name("table"), name, "table");
 
     partition = @extschema@.partition_for("table", value);
-    perform @extschema@._copy_constraints("table", partition);
+    perform @extschema@._copy_constraints("table", partition,
+        exclude_types:='{c}');
     perform @extschema@._copy_indexes("table", partition);
     perform @extschema@._copy_owner("table", partition);
     perform @extschema@._copy_permissions("table", partition);
@@ -600,22 +601,18 @@ begin
 end
 $$;
 
-create function _copy_constraints(src regclass, tgt regclass) returns void
+create function _copy_constraints(
+    src regclass, tgt regclass, exclude_types text[] default '{c}')
+returns void
 language plpgsql as $$
 declare
     stmt text;
 begin
-    -- Inheritance has copied a few constraints (the checks) but not others.
-    -- Assume it works by type so always copies *all* the checks and none
-    -- of the fkeys. So look at the type of constraints already created and
-    -- only copy the other types.
-    -- TODO: what to do with NO INHERIT constrs?
     for stmt in select
         format('alter table %s add %s', tgt, pg_get_constraintdef(oid))
     from pg_constraint where
     conrelid = src
-    and contype not in (
-        select contype from pg_constraint where conrelid = tgt)
+    and contype <> any (exclude_types)
     loop
         execute stmt;
     end loop;
