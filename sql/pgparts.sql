@@ -799,7 +799,7 @@ end
 $$;
 
 create function copy_constraints(
-    src regclass, tgt regclass, exclude_types text[] default '{c}')
+    src regclass, tgt regclass, exclude_types text[] default '{}')
 returns void
 language plpgsql as $$
 declare
