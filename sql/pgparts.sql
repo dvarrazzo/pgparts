@@ -588,171 +588,16 @@ begin
         @extschema@._schema_name("table"), name, "table");
 
     partition = @extschema@.partition_for("table", value);
-    perform @extschema@._copy_constraints("table", partition,
+    perform @extschema@.copy_constraints("table", partition,
         exclude_types:='{c}');
-    perform @extschema@._copy_indexes("table", partition);
-    perform @extschema@._copy_owner("table", partition);
-    perform @extschema@._copy_permissions("table", partition);
+    perform @extschema@.copy_indexes("table", partition);
+    perform @extschema@.copy_owner("table", partition);
+    perform @extschema@.copy_permissions("table", partition);
     -- TODO: inherit the rest
     -- perform @extschema@._copy_attributes("table", partition);
 
     -- Return the oid of the new table
     return partition;
-end
-$$;
-
-create function _copy_constraints(
-    src regclass, tgt regclass, exclude_types text[] default '{c}')
-returns void
-language plpgsql as $$
-declare
-    stmt text;
-begin
-    for stmt in select
-        format('alter table %s add %s', tgt, pg_get_constraintdef(oid))
-    from pg_constraint where
-    conrelid = src
-    and contype <> any (exclude_types)
-    loop
-        execute stmt;
-    end loop;
-end
-$$;
-
-create function _copy_indexes(src regclass, tgt regclass) returns void
-language plpgsql as $body$
-declare
-    isrcname name;
-    itgtname name;
-    indexdef text;
-    srcname name = @extschema@._table_name(src);
-    tgtname name = @extschema@._table_name(tgt);
-    schema name = @extschema@._schema_name(tgt);
-    parts text[];
-begin
-    for isrcname, indexdef in select
-        ic.relname, pg_get_indexdef(indexrelid)
-        from pg_index i
-        join pg_class ic on ic.oid = i.indexrelid
-        where indrelid = src
-        and not exists (
-            select 1 from pg_constraint
-            where conrelid = src
-            and conindid = indexrelid)
-    loop
-        -- Indexes require an unique name. Replace the src table name with the
-        -- tgt if the table name is contained in the index name, else make up
-        -- something.
-        if position(srcname in isrcname) > 0 then
-            itgtname = overlay(isrcname placing tgtname
-                from position(srcname in isrcname)
-                for length(srcname));
-        else
-            itgtname = tgtname || '_' || isrcname;
-        end if;
-
-        -- Make sure the new name is unique
-        itgtname = @extschema@._make_unique_relname(schema, itgtname);
-
-        -- Find the elements in the index definition.
-        -- The 'strict' causes an error if the regexp fails to parse
-        select regexp_matches(indexdef,
-            '^(CREATE (?:UNIQUE )?INDEX )(.*)( ON )(.*)( USING .*)$')
-        into strict parts;
-        execute format('%s%I%s%s%s',
-            parts[1], itgtname, parts[3], tgt, parts[5]);
-
-    end loop;
-end
-$body$;
-
-create function _make_unique_relname(schema name, name name) returns name
-language plpgsql stable as $$
-declare
-    orig name = name;
-    seq int = 0;
-begin
-    loop
-        perform 1 from pg_class where relname = name;
-        exit when not found;
-        seq = seq + 1;
-        name = orig || seq;
-    end loop;
-    return name;
-end
-$$;
-
-create function _copy_owner(src regclass, tgt regclass) returns void
-language plpgsql as $$
-declare
-    osrc name = @extschema@._owner_name(src);
-    otgt name = @extschema@._owner_name(tgt);
-begin
-    if osrc <> otgt then
-        execute format('alter table %s owner to %I', tgt, osrc);
-    end if;
-end
-$$;
-
-create function _copy_permissions(src regclass, tgt regclass) returns void
-language plpgsql as $$
-declare
-    grantee text;
-    set_sess text;
-    grant text;
-    reset_sess text;
-declare
-    prev_grantee text = '';
-begin
-    for grantee, set_sess, grant, reset_sess in
-        with acl as (
-            select unnest(relacl) as acl
-            from pg_class where oid = src),
-        acl_token as (
-            select regexp_matches(acl::text, '([^=]*)=([^/]*)(?:/(.*))?')
-                as acl_group
-            from acl),
-        acl_bit as (
-            select acl_group[1] as grantee,
-                regexp_matches(acl_group[2], '(.)(\*?)', 'g') as bits,
-                acl_group[3] as grantor
-            from acl_token),
-        bit_perm (bit, perm) as (values
-            ('r', 'select'), ('w', 'update'), ('a', 'insert'), ('d', 'delete'),
-            ('D', 'truncate'), ('x', 'references'), ('t', 'trigger')),
-        pretty as (
-            select case when b.grantee = '' then 'public' else b.grantee end
-                as grantee,
-            p.perm, b.bits[2] = '*' as grant_opt, b.grantor
-            from acl_bit b left join bit_perm p on p.bit = b.bits[1])
-        select
-            p.grantee,
-            case when current_user <> p.grantor then
-                format('set session authorization %s', p.grantor) end
-                    as set_sess,
-            format (
-                'grant %s on table %s to %s%s', perm, tgt, p.grantee,
-                case when grant_opt then ' with grant option' else '' end)
-                    as grant,
-            case when current_user <> p.grantor then
-                'reset session authorization'::text end as reset_sess
-        from pretty p
-    loop
-        -- For each grantee, revoke all his roles and set them from scratch.
-        -- This could have been done with a window function but the
-        -- query is already complicated enough...
-        if prev_grantee <> grantee then
-            execute format('revoke all on %s from %s', tgt, grantee);
-            prev_grantee = grantee;
-        end if;
-        if set_sess is not null then
-            execute set_sess;
-        end if;
-        execute "grant";
-        if reset_sess is not null then
-            execute reset_sess;
-        end if;
-    end loop;
 end
 $$;
 
@@ -928,6 +773,169 @@ insert into _schema_vtable values (
     'daily', 'timestamptz'::regtype,
     '@extschema@._day2key', '@extschema@._day2name',
     '@extschema@._day2start', '@extschema@._day2end');
+
+
+-- }}}
+
+-- Generic functions to copy tables properties {{{
+
+-- These are useful enough to deserve to be publicly accessible
+-- (maybe they deserve an extension of itself)
+
+create function make_unique_relname(schema name, name name) returns name
+language plpgsql stable as $$
+declare
+    orig name = name;
+    seq int = 0;
+begin
+    loop
+        perform 1 from pg_class where relname = name;
+        exit when not found;
+        seq = seq + 1;
+        name = orig || seq;
+    end loop;
+    return name;
+end
+$$;
+
+create function copy_constraints(
+    src regclass, tgt regclass, exclude_types text[] default '{c}')
+returns void
+language plpgsql as $$
+declare
+    stmt text;
+begin
+    for stmt in select
+        format('alter table %s add %s', tgt, pg_get_constraintdef(oid))
+    from pg_constraint where
+    conrelid = src
+    and contype <> any (exclude_types)
+    loop
+        execute stmt;
+    end loop;
+end
+$$;
+
+create function copy_indexes(src regclass, tgt regclass) returns void
+language plpgsql as $body$
+declare
+    isrcname name;
+    itgtname name;
+    indexdef text;
+    srcname name = @extschema@._table_name(src);
+    tgtname name = @extschema@._table_name(tgt);
+    schema name = @extschema@._schema_name(tgt);
+    parts text[];
+begin
+    for isrcname, indexdef in select
+        ic.relname, pg_get_indexdef(indexrelid)
+        from pg_index i
+        join pg_class ic on ic.oid = i.indexrelid
+        where indrelid = src
+        and not exists (
+            select 1 from pg_constraint
+            where conrelid = src
+            and conindid = indexrelid)
+    loop
+        -- Indexes require an unique name. Replace the src table name with the
+        -- tgt if the table name is contained in the index name, else make up
+        -- something.
+        if position(srcname in isrcname) > 0 then
+            itgtname = overlay(isrcname placing tgtname
+                from position(srcname in isrcname)
+                for length(srcname));
+        else
+            itgtname = tgtname || '_' || isrcname;
+        end if;
+
+        -- Make sure the new name is unique
+        itgtname = @extschema@.make_unique_relname(schema, itgtname);
+
+        -- Find the elements in the index definition.
+        -- The 'strict' causes an error if the regexp fails to parse
+        select regexp_matches(indexdef,
+            '^(CREATE (?:UNIQUE )?INDEX )(.*)( ON )(.*)( USING .*)$')
+        into strict parts;
+        execute format('%s%I%s%s%s',
+            parts[1], itgtname, parts[3], tgt, parts[5]);
+
+    end loop;
+end
+$body$;
+
+create function copy_owner(src regclass, tgt regclass) returns void
+language plpgsql as $$
+declare
+    osrc name = @extschema@._owner_name(src);
+    otgt name = @extschema@._owner_name(tgt);
+begin
+    if osrc <> otgt then
+        execute format('alter table %s owner to %I', tgt, osrc);
+    end if;
+end
+$$;
+
+create function copy_permissions(src regclass, tgt regclass) returns void
+language plpgsql as $$
+declare
+    grantee text;
+    set_sess text;
+    grant text;
+    reset_sess text;
+declare
+    prev_grantee text = '';
+begin
+    for grantee, set_sess, grant, reset_sess in
+        with acl as (
+            select unnest(relacl) as acl
+            from pg_class where oid = src),
+        acl_token as (
+            select regexp_matches(acl::text, '([^=]*)=([^/]*)(?:/(.*))?')
+                as acl_group
+            from acl),
+        acl_bit as (
+            select acl_group[1] as grantee,
+                regexp_matches(acl_group[2], '(.)(\*?)', 'g') as bits,
+                acl_group[3] as grantor
+            from acl_token),
+        bit_perm (bit, perm) as (values
+            ('r', 'select'), ('w', 'update'), ('a', 'insert'), ('d', 'delete'),
+            ('D', 'truncate'), ('x', 'references'), ('t', 'trigger')),
+        pretty as (
+            select case when b.grantee = '' then 'public' else b.grantee end
+                as grantee,
+            p.perm, b.bits[2] = '*' as grant_opt, b.grantor
+            from acl_bit b left join bit_perm p on p.bit = b.bits[1])
+        select
+            p.grantee,
+            case when current_user <> p.grantor then
+                format('set session authorization %s', p.grantor) end
+                    as set_sess,
+            format (
+                'grant %s on table %s to %s%s', perm, tgt, p.grantee,
+                case when grant_opt then ' with grant option' else '' end)
+                    as grant,
+            case when current_user <> p.grantor then
+                'reset session authorization'::text end as reset_sess
+        from pretty p
+    loop
+        -- For each grantee, revoke all his roles and set them from scratch.
+        -- This could have been done with a window function but the
+        -- query is already complicated enough...
+        if prev_grantee <> grantee then
+            execute format('revoke all on %s from %s', tgt, grantee);
+            prev_grantee = grantee;
+        end if;
+        if set_sess is not null then
+            execute set_sess;
+        end if;
+        execute "grant";
+        if reset_sess is not null then
+            execute reset_sess;
+        end if;
+    end loop;
+end
+$$;
 
 
 -- }}}
