@@ -61,6 +61,7 @@ select pg_catalog.pg_extension_config_dump('partitioned_table', '');
 create table partition (
     schema_name name,
     table_name name,
+    primary key (schema_name, table_name),
     base_table regclass not null references partitioned_table ("table"),
     start_value text not null,
     end_value text not null);
