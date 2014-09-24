@@ -59,16 +59,27 @@ select pg_catalog.pg_extension_config_dump('partitioned_table', '');
 
 
 create table partition (
-    partition regclass primary key,
+    schema_name name,
+    table_name name,
     base_table regclass not null references partitioned_table ("table"),
     start_value text not null,
     end_value text not null);
 
 comment on table partition is
-    'The ranges covered by the single partitions';
+    'The partition tables generated with the range covered by each of them';
 
 select pg_catalog.pg_extension_config_dump('partition', '');
 
+
+create view existing_partition as
+select c.oid::regclass as partition,
+    p.schema_name, p.table_name, p.base_table, p.start_value, p.end_value
+    from pg_class c join pg_namespace s on c.relnamespace = s.oid
+    join @extschema@.partition p
+        on p.schema_name = s.nspname and p.table_name = c.relname;
+
+comment on view existing_partition is
+    'The partition tables that have not been dropped from the database';
 
 -- }}}
 
@@ -266,7 +277,7 @@ $$;
 create function _partitions("table" regclass) returns setof regclass
 language sql as $$
     select p.partition
-    from @extschema@.partition p
+    from @extschema@.existing_partition p
     join pg_inherits i on p.partition = inhrelid
     where p.base_table = "table" and inhparent = "table";
 $$;
@@ -390,12 +401,13 @@ begin
         select format(
 $c$
     if %L <= new.%I and new.%I < %L then
-        insert into %s values (new.*);
+        insert into %I.%I values (new.*);
         return null;
     end if;
 $c$,
-            p.start_value, field, field, p.end_value, p.partition)
-        from @extschema@.partition p
+            p.start_value, field, field, p.end_value,
+            p.schema_name, p.table_name)
+        from @extschema@.existing_partition p
         where p.partition in (select @extschema@._partitions("table"))
         order by p.partition::text desc)
     select array_to_string(array_agg(body), '') from checks
@@ -442,8 +454,9 @@ $body$;
 create function _create_update_function("table" regclass) returns void
 language plpgsql as $body$
 declare
-    schema name = @extschema@._schema_name("table");
-    fname name = @extschema@._table_name("table") || '_partition_update';
+    sname name = @extschema@._schema_name("table");
+    tname name = @extschema@._table_name("table");
+    fname name = tname || '_partition_update';
     pkey text;
 begin
 
@@ -461,12 +474,14 @@ begin
     execute format($f$
         create function %I.%I() returns trigger language plpgsql as $$
 begin
-    delete from %s where %s;
-    insert into %s values (new.*);
+    delete from %I.%I where %s;
+    insert into %I.%I values (new.*);
     return null;
 end
 $$
-        $f$, schema, fname, "table", pkey, "table");
+        $f$, sname, fname,
+        sname, tname, pkey,
+        sname, tname);
 end
 $body$;
 
@@ -513,9 +528,11 @@ begin
         -- Insert the data about the partition in the table; the other
         -- functions will get the details from here
         insert into @extschema@.partition
-            (partition, base_table, start_value, end_value)
+            (schema_name, table_name, base_table, start_value, end_value)
         values (
-            partition, "table",
+            @extschema@._schema_name(partition),
+            @extschema@._table_name(partition),
+            "table",
             @extschema@.start_for("table", value),
             @extschema@.end_for("table", value));
 
@@ -618,7 +635,7 @@ begin
         -- Defined by _create_update_function() in setup()
         @extschema@._table_name(p.base_table) || '_partition_update',
         @extschema@._schema_name(p.base_table)
-    from @extschema@.partition p
+    from @extschema@.existing_partition p
     join @extschema@.partitioned_table t on p.base_table = t."table"
     where p.partition = _create_partition_update_trigger.partition
     into strict field, start_value, end_value, fname, sname;
@@ -642,7 +659,7 @@ declare
     end_value text;
 begin
     select t.field, p.start_value, p.end_value
-    from @extschema@.partition p
+    from @extschema@.existing_partition p
     join @extschema@.partitioned_table t on p.base_table = t."table"
     where p.partition = _constraint_partition.partition
     into strict field, start_value, end_value;
