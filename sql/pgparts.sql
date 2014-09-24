@@ -331,7 +331,7 @@ begin
             ("table", field, field_type, schema_name, schema_params)
         values ("table", field, field_type, schema_name, schema_params);
 
-        perform @extschema@._maintain_insert_function("table");
+        perform @extschema@.maintain_insert_function("table");
         perform @extschema@._create_insert_trigger("table");
         perform @extschema@._create_update_function("table");
 
@@ -343,7 +343,7 @@ end
 $$;
 
 -- TODO: implement bisection access (should be a partitioned table param)
-create function _maintain_insert_function("table" regclass) returns void
+create function maintain_insert_function("table" regclass) returns void
 language plpgsql as $$
 declare
     nparts int;
@@ -540,7 +540,7 @@ begin
 
         perform @extschema@._constraint_partition(partition);
         perform @extschema@._create_partition_update_trigger(partition);
-        perform @extschema@._maintain_insert_function("table");
+        perform @extschema@.maintain_insert_function("table");
 
     exception
         -- you can't have this clause empty
@@ -566,7 +566,7 @@ begin
     if partition in (select @extschema@._partitions("table")) then
         execute format('alter table %s no inherit %s',
             partition, "table");
-        perform @extschema@._maintain_insert_function("table");
+        perform @extschema@.maintain_insert_function("table");
     end if;
 
     return partition;
@@ -588,7 +588,7 @@ begin
     if partition not in (select @extschema@._partitions("table")) then
         execute format('alter table %s inherit %s',
             partition, "table");
-        perform @extschema@._maintain_insert_function("table");
+        perform @extschema@.maintain_insert_function("table");
     end if;
 
     return partition;
