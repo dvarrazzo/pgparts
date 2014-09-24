@@ -12,7 +12,7 @@ select * from partest.info('sometbl', '2014-09-15');
 (1 row)
 
 select partest.create_for('sometbl', '2014-09-15');
-ERROR:  the table sometbl has not been partitioned yet
+ERROR:  the table sometbl has not been prepared for partitions yet
 HINT:  You should call partest.setup('sometbl').
 -- We don't know this schema
 select partest.setup('sometbl'::regclass, 'day', 'derp', '{3}');
@@ -31,7 +31,7 @@ select * from partest.info('sometbl', '2014-09-15');
 
 -- Setup works once
 select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
-ERROR:  the table sometbl is already partitioned
+ERROR:  the table sometbl is already prepared for partitions
 HINT:  Use partest.create_for('sometbl', VALUE) to create new partitions on the table.
 -- This insert fails
 insert into sometbl values (100, '2014-09-15', 'first');

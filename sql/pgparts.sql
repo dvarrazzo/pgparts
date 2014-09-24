@@ -303,7 +303,8 @@ begin
         where t."table" = setup."table";
         if found then
             raise using
-                message = format('the table %s is already partitioned',
+                message = format(
+                    'the table %s is already prepared for partitions',
                     "table"),
                 hint = format('Use @extschema@.create_for(%L, VALUE) '
                     'to create new partitions on the table.', "table");
@@ -502,7 +503,8 @@ begin
         select (@extschema@.info("table", value)).* into strict info;
         if info.state = 'unpartitioned' then
             raise using
-                message = format('the table %s has not been partitioned yet',
+                message = format(
+                    'the table %s has not been prepared for partitions yet',
                     "table"),
                 hint = format('You should call @extschema@.setup(%L).',
                     "table");
