@@ -4,18 +4,87 @@
 -- Copyright (C) 2014 Daniele Varrazzo <daniele.varrazzo@gmail.com>
 --
 
+-- Parameters handling {{{
+
+create domain params as text[][];
+
+create function
+_param_value(params params, name name) returns text
+language plpgsql immutable strict as
+$$
+declare
+    param text[];
+begin
+    foreach param slice 1 in array params::text[][] loop
+        if name = param[1] then
+            return param[2];
+        end if;
+    end loop;
+    return null;
+end
+$$;
+
+create function
+_param_exists(params params, name name) returns bool
+language plpgsql immutable strict as
+$$
+declare
+    param text[];
+begin
+    if array_ndims(params) is null then
+        return false;
+    end if;
+
+    foreach param slice 1 in array params::text[][] loop
+        if name = param[1] then
+            return true;
+        end if;
+    end loop;
+
+    return false;
+end
+$$;
+
+-- }}}
+
 -- Tables used to memorize partitioned tables {{{
 
 create table partition_schema (
     name name,
     primary key (name),
 
-    params text[] not null,
     description text
 );
 
 comment on table partition_schema is
     'The partitioning schemas the system knows';
+
+
+create table schema_param (
+    schema name,
+    param name,
+    primary key (schema, param),
+    type regtype not null,
+    "default" text,
+    description text
+);
+
+comment on table partition_schema is
+    'Parameter definitions of partitioning schemas';
+
+
+create function _valid_for_type(s text, t regtype) returns bool
+language plpgsql immutable as $$
+begin
+    if t is not null then
+        execute format('select %L::%s', s, t);
+    end if;
+    return true;
+end
+$$;
+
+alter table schema_param add constraint valid_default
+    check (_valid_for_type("default", type));
 
 -- TODO: allow user-defined partition schemas to be dumped
 
@@ -48,11 +117,11 @@ create table partitioned_table (
     foreign key (field_type, schema_name)
         references _schema_vtable (field_type, schema_name),
 
-    schema_params text[] not null
+    schema_params params not null
 );
 
 comment on table partitioned_table is
-    'The partitioning parameters for the tables prepared to create partitions';
+    'The base tables prepared for partitioning';
 
 -- Include in pg_dump
 select pg_catalog.pg_extension_config_dump('partitioned_table', '');
@@ -87,7 +156,7 @@ comment on view existing_partition is
 -- Virtual methods dispatch {{{
 
 create function _value2key(
-    field_type regtype, schema_name name, params text[], value text)
+    field_type regtype, schema_name name, params params, value text)
 returns text language plpgsql stable as $$
 declare
     value2key text;
@@ -105,7 +174,7 @@ end
 $$;
 
 create function _value2name(
-    field_type regtype, schema_name name, params text[],
+    field_type regtype, schema_name name, params params,
     value text, base_name name)
 returns name language plpgsql stable as $$
 declare
@@ -126,7 +195,7 @@ end
 $$;
 
 create function _value2start(
-    field_type regtype, schema_name name, params text[], value text)
+    field_type regtype, schema_name name, params params, value text)
 returns name language plpgsql stable as $$
 declare
     value2key text;
@@ -146,7 +215,7 @@ end
 $$;
 
 create function _value2end(
-    field_type regtype, schema_name name, params text[], value text)
+    field_type regtype, schema_name name, params params, value text)
 returns name language plpgsql stable as $$
 declare
     value2key text;
@@ -288,15 +357,19 @@ $$;
 
 -- Setting up a partitioned table {{{
 
--- TODO: should take named params
 create function setup(
-    "table" regclass, field name, schema_name name, schema_params text[])
+    "table" regclass, field name, schema_name name,
+    schema_params params default '{}')
 returns void
 language plpgsql as
 $$
 <<block>>
 declare
     field_type regtype;
+    param text[];
+    param_name name;
+    param_type regtype;
+    param_default text;
 begin
     begin  -- transaction
         -- Check the table is already set up
@@ -327,6 +400,30 @@ begin
             raise 'partitioning schema % on type % not known',
                 schema_name, field_type;
         end if;
+
+        -- Validate the schema parameters
+        if array_ndims(schema_params::text[][]) is not null then
+            foreach param slice 1 in array schema_params::text[][] loop
+                select type from @extschema@.schema_param sp
+                where sp.schema = schema_name and sp.param = block.param[1]
+                into param_type;
+                if not found then
+                    raise 'unknown parameter for partitioning schema %: %',
+                        schema_name, param[1];
+                end if;
+                perform @extschema@._valid_for_type(block.param[2], param_type);
+            end loop;
+        end if;
+
+        -- Complete the missing parameters with defaults
+        for param_name, param_default in
+        select sp.param, sp."default" from @extschema@.schema_param sp
+        where sp.schema = schema_name loop
+            if not @extschema@._param_exists(schema_params, param_name) then
+                schema_params := schema_params
+                    || array[array[param_name::text, param_default]];
+            end if;
+        end loop;
 
         insert into @extschema@.partitioned_table
             ("table", field, field_type, schema_name, schema_params)
@@ -679,16 +776,37 @@ $f$;
 
 -- Partitioning schemas implementations {{{
 
+create domain positive_integer as integer
+    constraint greater_than_zero check (value > 0);
+
+create domain day_of_week as integer
+    constraint valid_dow check (0 <= value and value <= 6);
+
+
+insert into partition_schema values ('monthly',
+$$Each partition of the table contains one or more months.
+
+The partitioning triggers checks the partitions from the newest to the oldest
+so, if normal inserts happens in order of time, dispatching to the right
+partition should be o(1), whereas for random inserts dispatching is o(n) in the
+number of partitions.
+$$);
+
+insert into schema_param values (
+    'monthly', 'months_per_partiton', '@extschema@.positive_integer', '1',
+    'Number of months contained in each partition.');
+
 -- TODO: fix timezones! At least UTF, maybe a zone param. Note that regression
 -- test is performed in a "strange" timezone: see resulting tables' checks.
-create function _month2key(params text[], value timestamptz) returns int
+create function _month2key(params params, value timestamptz) returns int
 language sql stable as
 $$
     select ((12 * date_part('year', $2) + date_part('month', $2) - 1)::int
-        / params[1]::int) * params[1]::int;
+        / @extschema@._param_value(params, 'months_per_partiton')::int)
+        * @extschema@._param_value(params, 'months_per_partiton')::int;
 $$;
 
-create function _month2start(params text[], key int) returns date
+create function _month2start(params params, key int) returns date
 language sql stable as
 $$
     select ('0001-01-01'::date
@@ -696,28 +814,19 @@ $$
         - '1 year'::interval)::date;
 $$;
 
-create function _month2end(params text[], key int) returns date
+create function _month2end(params params, key int) returns date
 language sql stable as $$
     select (@extschema@._month2start(params, key)
-        + '1 month'::interval * params[1]::int)::date;
+        + '1 month'::interval
+        * @extschema@._param_value(params, 'months_per_partiton')::int)::date;
 $$;
 
-create function _month2name(params text[], key int, base_name name)
+create function _month2name(params params, key int, base_name name)
 returns name language sql stable as
 $$
     select (base_name || '_'
         || to_char(@extschema@._month2start(params, key), 'YYYYMM'))::name;
 $$;
-
-insert into partition_schema values (
-    'monthly', '{months_per_partiton}',
-$$Each partition of the table contains 'months_per_partiton' months.
-
-The partitioning triggers checks the partitions from the newest to the oldest
-so, if normal inserts happens in order of time, dispatching to the right
-partition should be o(1), whereas for random inserts dispatching is o(n) in the
-number of partitions.
-$$);
 
 insert into _schema_vtable values (
     'monthly', 'date'::regtype,
@@ -735,49 +844,59 @@ insert into _schema_vtable values (
     '@extschema@._month2start', '@extschema@._month2end');
 
 
-create function _day2key(params text[], value timestamptz) returns int
-language sql stable as
-$$
-    -- The 3 makes weekly partitions starting on Sunday with offset 0
-    -- which is consistent with extract(dow), if anything.
-    select (((value::date - 'epoch'::date)::int
-            - coalesce(params[2]::int, 0) - 3)
-        / coalesce(params[1]::int, 1)) * coalesce(params[1]::int, 1);
-$$;
 
-create function _day2start(params text[], key int) returns date
-language sql stable as
-$$
-    select ('epoch'::date + '1 day'::interval
-        * (key + 3 + coalesce(params[2]::int, 0)))::date;
-$$;
-
-create function _day2end(params text[], key int) returns date
-language sql stable as $$
-    select (@extschema@._day2start(params, key)
-        + '1 day'::interval * params[1]::int)::date;
-$$;
-
-create function _day2name(params text[], key int, base_name name)
-returns name language sql stable as
-$$
-    select (base_name || '_'
-        || to_char(@extschema@._day2start(params, key), 'YYYYMMDD'))::name;
-$$;
-
-insert into partition_schema values (
-    'daily', '{days_per_partiton,weeks_start_on}',
-$$Each partition of the table contains 'days_per_partiton' days (default 1).
-
-If days_per_partiton = 7 the partitions will start on Sunday. You can change it
-setting a value to weeks_start_on: as is extract('dow' from date) Sunday is
-0, Saturday is 6.
+insert into partition_schema values ('daily',
+$$Each partition of the table contains one or more days.
 
 The partitioning triggers checks the partitions from the newest to the oldest
 so, if normal inserts happens in order of time, dispatching to the right
 partition should be o(1), whereas for random inserts dispatching is o(n) in the
 number of partitions.
 $$);
+
+insert into schema_param values (
+    'daily', 'days_per_partition', '@extschema@.positive_integer', '1',
+    'Number of days contained in each partition.');
+
+insert into schema_param values (
+    'daily', 'weeks_start_on', '@extschema@.day_of_week', '0',
+$$Day of the week each partition starts if 'days_per_partition' = 7.
+
+As is extract('dow' from date), 0 is Sunday, 6 is Saturday.
+$$);
+
+create function _day2key(params params, value timestamptz) returns int
+language sql stable as
+$$
+    -- The 3 makes weekly partitions starting on Sunday with offset 0
+    -- which is consistent with extract(dow), if anything.
+    select
+        (((value::date - 'epoch'::date)::int
+            - @extschema@._param_value(params, 'weeks_start_on')::int - 3)
+        / @extschema@._param_value(params, 'days_per_partition')::int)
+        * @extschema@._param_value(params, 'days_per_partition')::int;
+$$;
+
+create function _day2start(params params, key int) returns date
+language sql stable as
+$$
+    select ('epoch'::date + '1 day'::interval * (key + 3
+        + @extschema@._param_value(params, 'weeks_start_on')::int))::date;
+$$;
+
+create function _day2end(params params, key int) returns date
+language sql stable as $$
+    select (@extschema@._day2start(params, key)
+        + '1 day'::interval
+        * @extschema@._param_value(params, 'days_per_partition')::int)::date;
+$$;
+
+create function _day2name(params params, key int, base_name name)
+returns name language sql stable as
+$$
+    select (base_name || '_'
+        || to_char(@extschema@._day2start(params, key), 'YYYYMMDD'))::name;
+$$;
 
 insert into _schema_vtable values (
     'daily', 'date'::regtype,

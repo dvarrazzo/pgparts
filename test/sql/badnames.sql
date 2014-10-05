@@ -12,7 +12,8 @@ create table "s3.s4"."t1.t2" (
 
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
-select "s1.s2".setup('"s3.s4"."t1.t2"'::regclass, 'f1.f2', 'monthly', '{3}');
+select "s1.s2".setup('"s3.s4"."t1.t2"', 'f1.f2', 'monthly',
+    '{{months_per_partiton,3}}');
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
 
 insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');
@@ -74,7 +75,7 @@ create unique index somename on "s3.s4"."constr.2" (iint) where id > 0;
 create unique index taken on "s3.s4"."constr.2" (iint) where id > 1;
 create table "s3.s4"."constr.2_201409_taken" ();
 
-select "s1.s2".setup('"s3.s4"."constr.2" ', 'date', 'monthly', '{1}');
+select "s1.s2".setup('"s3.s4"."constr.2" ', 'date', 'monthly');
 select "s1.s2".create_for('"s3.s4"."constr.2" ', '2014-09-01');
 
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
@@ -114,13 +115,13 @@ $$
     order by 1::text;
 $$;
 
-select "s1.s2".setup('"test.own"."t.1"', 'date', 'monthly', '{1}');
+select "s1.s2".setup('"test.own"."t.1"', 'date', 'monthly');
 select "s1.s2".create_for('"test.own"."t.1"', '2014-09-01');
 select * from comp_acls('"test.own"."t.1"', '"test.own"."t.1_201409"');
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = '"test.own"."t.1"'::regclass;
 
-select "s1.s2".setup('"test.own"."t.2"', 'date', 'monthly', '{1}');
+select "s1.s2".setup('"test.own"."t.2"', 'date', 'monthly');
 select "s1.s2".create_for('"test.own"."t.2"', '2014-09-01');
 select * from comp_acls('"test.own"."t.2"', '"test.own"."t.2_201409"');
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid

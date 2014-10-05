@@ -15,9 +15,9 @@ select partest.create_for('sometbl', '2014-09-15');
 ERROR:  the table sometbl has not been prepared for partitions yet
 HINT:  You should call partest.setup('sometbl').
 -- We don't know this schema
-select partest.setup('sometbl'::regclass, 'day', 'derp', '{3}');
+select partest.setup('sometbl', 'day', 'derp');
 ERROR:  partitioning schema derp on type date not known
-select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
+select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
  setup 
 -------
  
@@ -30,7 +30,7 @@ select * from partest.info('sometbl', '2014-09-15');
 (1 row)
 
 -- Setup works once
-select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
+select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
 ERROR:  the table sometbl is already prepared for partitions
 HINT:  Use partest.create_for('sometbl', VALUE) to create new partitions on the table.
 -- This insert fails
@@ -197,7 +197,7 @@ create index constr2_iint on constr2(iint);
 create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
-select partest.setup('constr2', 'date', 'monthly', '{1}');
+select partest.setup('constr2', 'date', 'monthly', '{{months_per_partiton,1}}');
  setup 
 -------
  
@@ -269,7 +269,7 @@ $$
     from src full outer join tgt on src_acl = tgt_acl
     order by 1::text;
 $$;
-select partest.setup('testown.t1', 'date', 'monthly', '{1}');
+select partest.setup('testown.t1', 'date', 'monthly');
  setup 
 -------
  
@@ -297,7 +297,7 @@ where c.oid = 'testown.t1'::regclass;
  u1
 (1 row)
 
-select partest.setup('testown.t2', 'date', 'monthly', '{1}');
+select partest.setup('testown.t2', 'date', 'monthly');
  setup 
 -------
  
@@ -322,7 +322,7 @@ where c.oid = 'testown.t1'::regclass;
  u1
 (1 row)
 
-select partest.setup('testown.t3', 'date', 'monthly', '{1}');
+select partest.setup('testown.t3', 'date', 'monthly');
  setup 
 -------
  
@@ -354,7 +354,7 @@ drop user u2;
 drop user u3;
 -- Monthly timestamp
 create table monthts (id serial primary key, ts timestamp);
-select partest.setup('monthts', 'ts', 'monthly', '{1}');
+select partest.setup('monthts', 'ts', 'monthly');
  setup 
 -------
  
@@ -384,7 +384,7 @@ ERROR:  partition on table monthts missing for ts = '2014-11-01 00:00:00'
 HINT:  You should call partest.create_for('monthts', '2014-11-01 00:00:00').
 -- Monthly timestamptz
 create table monthtstz (id serial primary key, ts timestamptz);
-select partest.setup('monthtstz', 'ts', 'monthly', '{1}');
+select partest.setup('monthtstz', 'ts', 'monthly');
  setup 
 -------
  
@@ -414,7 +414,7 @@ ERROR:  partition on table monthtstz missing for ts = '2014-11-01 00:00:00-07'
 HINT:  You should call partest.create_for('monthtstz', '2014-11-01 00:00:00-07').
 -- Daily date
 create table days (id serial primary key, ts timestamptz);
-select partest.setup('days', 'ts', 'daily', '{1}');
+select partest.setup('days', 'ts', 'daily', '{{days_per_partition,1}}');
  setup 
 -------
  
@@ -444,7 +444,8 @@ ERROR:  partition on table days missing for ts = '2014-09-03 00:00:00-07'
 HINT:  You should call partest.create_for('days', '2014-09-03 00:00:00-07').
 -- Weeks starting on Saturdays
 create table weeks (id serial primary key, ts date);
-select partest.setup('weeks', 'ts', 'daily', '{7,6}');
+select partest.setup('weeks', 'ts', 'daily',
+    '{{days_per_partition,7},{weeks_start_on,6}}');
  setup 
 -------
  

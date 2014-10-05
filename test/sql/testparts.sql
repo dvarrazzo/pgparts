@@ -13,13 +13,13 @@ select * from partest.info('sometbl', '2014-09-15');
 select partest.create_for('sometbl', '2014-09-15');
 
 -- We don't know this schema
-select partest.setup('sometbl'::regclass, 'day', 'derp', '{3}');
+select partest.setup('sometbl', 'day', 'derp');
 
-select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
+select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
 select * from partest.info('sometbl', '2014-09-15');
 
 -- Setup works once
-select partest.setup('sometbl'::regclass, 'day', 'monthly', '{3}');
+select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
 
 -- This insert fails
 insert into sometbl values (100, '2014-09-15', 'first');
@@ -90,7 +90,7 @@ create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
 
-select partest.setup('constr2', 'date', 'monthly', '{1}');
+select partest.setup('constr2', 'date', 'monthly', '{{months_per_partiton,1}}');
 select partest.create_for('constr2', '2014-09-01');
 
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
@@ -137,19 +137,19 @@ $$
     order by 1::text;
 $$;
 
-select partest.setup('testown.t1', 'date', 'monthly', '{1}');
+select partest.setup('testown.t1', 'date', 'monthly');
 select partest.create_for('testown.t1', '2014-09-01');
 select * from comp_acls('testown.t1', 'testown.t1_201409');
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
 
-select partest.setup('testown.t2', 'date', 'monthly', '{1}');
+select partest.setup('testown.t2', 'date', 'monthly');
 select partest.create_for('testown.t2', '2014-09-01');
 select * from comp_acls('testown.t2', 'testown.t2_201409');
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
 
-select partest.setup('testown.t3', 'date', 'monthly', '{1}');
+select partest.setup('testown.t3', 'date', 'monthly');
 select partest.create_for('testown.t3', '2014-09-01');
 select * from comp_acls('testown.t3', 'testown.t3_201409');
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
@@ -164,7 +164,7 @@ drop user u3;
 
 -- Monthly timestamp
 create table monthts (id serial primary key, ts timestamp);
-select partest.setup('monthts', 'ts', 'monthly', '{1}');
+select partest.setup('monthts', 'ts', 'monthly');
 select partest.create_for('monthts', '2014-09-01');
 select partest.create_for('monthts', '2014-10-01');
 insert into monthts(ts) values ('2014-08-31T23:59:59.999');
@@ -176,7 +176,7 @@ insert into monthts(ts) values ('2014-11-01');
 
 -- Monthly timestamptz
 create table monthtstz (id serial primary key, ts timestamptz);
-select partest.setup('monthtstz', 'ts', 'monthly', '{1}');
+select partest.setup('monthtstz', 'ts', 'monthly');
 select partest.create_for('monthtstz', '2014-09-01');
 select partest.create_for('monthtstz', '2014-10-01');
 insert into monthtstz(ts) values ('2014-08-31T23:59:59.999');
@@ -188,7 +188,7 @@ insert into monthtstz(ts) values ('2014-11-01');
 
 -- Daily date
 create table days (id serial primary key, ts timestamptz);
-select partest.setup('days', 'ts', 'daily', '{1}');
+select partest.setup('days', 'ts', 'daily', '{{days_per_partition,1}}');
 select partest.create_for('days', '2014-09-01');
 select partest.create_for('days', '2014-09-02');
 insert into days(ts) values ('2014-08-31T23:59:59.999');
@@ -200,7 +200,8 @@ insert into days(ts) values ('2014-09-03');
 
 -- Weeks starting on Saturdays
 create table weeks (id serial primary key, ts date);
-select partest.setup('weeks', 'ts', 'daily', '{7,6}');
+select partest.setup('weeks', 'ts', 'daily',
+    '{{days_per_partition,7},{weeks_start_on,6}}');
 select partest.create_for('weeks', '2014-09-12');
 select partest.create_for('weeks', '2014-09-13');
 insert into weeks(ts) values ('2014-09-05');
