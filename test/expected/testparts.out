@@ -1,3 +1,5 @@
+\pset format unaligned
+\pset footer off
 create schema partest;
 set datestyle = 'ISO';
 create extension pgparts with schema partest;
@@ -6,11 +8,8 @@ create table sometbl (
     day date not null,
     data text);
 select * from partest.info('sometbl', '2014-09-15');
-     state     | partition 
----------------+-----------
- unpartitioned | 
-(1 row)
-
+state|partition
+unpartitioned|
 select partest.create_for('sometbl', '2014-09-15');
 ERROR:  the table sometbl has not been prepared for partitions yet
 HINT:  You should call partest.setup('sometbl').
@@ -18,17 +17,11 @@ HINT:  You should call partest.setup('sometbl').
 select partest.setup('sometbl', 'day', 'derp');
 ERROR:  partitioning schema derp on type date not known
 select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
- setup 
--------
- 
-(1 row)
+setup
 
 select * from partest.info('sometbl', '2014-09-15');
-  state  | partition 
----------+-----------
- missing | 
-(1 row)
-
+state|partition
+missing|
 -- Setup works once
 select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
 ERROR:  the table sometbl is already prepared for partitions
@@ -38,48 +31,27 @@ insert into sometbl values (100, '2014-09-15', 'first');
 ERROR:  no partition available on table sometbl
 HINT:  You should call partest.create_for('sometbl', '2014-09-15').
 select * from only sometbl;
- id | day | data 
-----+-----+------
-(0 rows)
-
+id|day|data
 select partest.create_for('sometbl', '2014-09-15');
-   create_for   
-----------------
- sometbl_201407
-(1 row)
-
+create_for
+sometbl_201407
 select * from partest.info('sometbl', '2014-09-15');
-  state  |   partition    
----------+----------------
- present | sometbl_201407
-(1 row)
-
+state|partition
+present|sometbl_201407
 -- Insert
 insert into sometbl values (100, '2014-09-15', 'first');
 select * from only sometbl;
- id | day | data 
-----+-----+------
-(0 rows)
-
+id|day|data
 select * from only sometbl_201407;
- id  |    day     | data  
------+------------+-------
- 100 | 2014-09-15 | first
-(1 row)
-
+id|day|data
+100|2014-09-15|first
 -- Update, no partition change
 update sometbl set day = '2014-8-15' where id = 100;
 select * from only sometbl;
- id | day | data 
-----+-----+------
-(0 rows)
-
+id|day|data
 select * from only sometbl_201407;
- id  |    day     | data  
------+------------+-------
- 100 | 2014-08-15 | first
-(1 row)
-
+id|day|data
+100|2014-08-15|first
 -- Update to fail partition
 update sometbl set day = '2014-10-15' where id = 100;
 ERROR:  partition on table sometbl missing for day = '2014-10-15'
@@ -87,60 +59,33 @@ HINT:  You should call partest.create_for('sometbl', '2014-10-15').
 CONTEXT:  SQL statement "insert into public.sometbl values (new.*)"
 PL/pgSQL function sometbl_partition_update() line 4 at SQL statement
 select * from only sometbl;
- id | day | data 
-----+-----+------
-(0 rows)
-
+id|day|data
 select * from only sometbl_201407;
- id  |    day     | data  
------+------------+-------
- 100 | 2014-08-15 | first
-(1 row)
-
+id|day|data
+100|2014-08-15|first
 -- Create the missing partition and try again
 select partest.create_for('sometbl', '2014-10-15');
-   create_for   
-----------------
- sometbl_201410
-(1 row)
-
+create_for
+sometbl_201410
 update sometbl set day = '2014-10-15' where id = 100;
 select * from only sometbl;
- id | day | data 
-----+-----+------
-(0 rows)
-
+id|day|data
 select * from only sometbl_201407;
- id | day | data 
-----+-----+------
-(0 rows)
-
+id|day|data
 select * from only sometbl_201410;
- id  |    day     | data  
------+------------+-------
- 100 | 2014-10-15 | first
-(1 row)
-
+id|day|data
+100|2014-10-15|first
 -- Detach the partition removes it from writing
 insert into sometbl values (104, '2014-07-10', 'third');
 select partest.detach_for('sometbl', '2014-07-10');
-   detach_for   
-----------------
- sometbl_201407
-(1 row)
-
+detach_for
+sometbl_201407
 -- Partition is there but removed from the base table
 select * from sometbl where day = '2014-07-10';
- id | day | data 
-----+-----+------
-(0 rows)
-
+id|day|data
 select * from sometbl_201407 where day = '2014-07-10';
- id  |    day     | data  
------+------------+-------
- 104 | 2014-07-10 | third
-(1 row)
-
+id|day|data
+104|2014-07-10|third
 -- Trigger has been maintained
 insert into sometbl values (105, '2014-07-10', 'fourth');
 ERROR:  partition on table sometbl missing for day = '2014-07-10'
@@ -148,37 +93,25 @@ HINT:  You should call partest.create_for('sometbl', '2014-07-10').
 insert into sometbl values (106, '2014-10-10', 'fifth');
 -- Idempotent
 select partest.detach_for('sometbl', '2014-07-10');
-   detach_for   
-----------------
- sometbl_201407
-(1 row)
-
+detach_for
+sometbl_201407
 -- Can't create the same partition again
 select partest.create_for('sometbl', '2014-07-10');
 ERROR:  the partition sometbl_201407 exists but is detached
 HINT:  You can attach it back using partest.attach_for('sometbl', '2014-07-10').
 -- But can attach it back
 select partest.attach_for('sometbl', '2014-07-10');
-   attach_for   
-----------------
- sometbl_201407
-(1 row)
-
+attach_for
+sometbl_201407
 insert into sometbl values (105, '2014-07-10', 'fourth');
 select * from sometbl where day = '2014-07-10' order by id;
- id  |    day     |  data  
------+------------+--------
- 104 | 2014-07-10 | third
- 105 | 2014-07-10 | fourth
-(2 rows)
-
+id|day|data
+104|2014-07-10|third
+105|2014-07-10|fourth
 -- Idempotent
 select partest.attach_for('sometbl', '2014-07-10');
-   attach_for   
-----------------
- sometbl_201407
-(1 row)
-
+attach_for
+sometbl_201407
 -- Constraints, indexes, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);
@@ -199,52 +132,37 @@ create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
 select partest.setup('constr2', 'date', 'monthly', '{{months_per_partiton,1}}');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('constr2', '2014-09-01');
-   create_for   
-----------------
- constr2_201409
-(1 row)
-
+create_for
+constr2_201409
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
 where conrelid = 'constr2_201409'::regclass
 order by conname;
-            conname             |                       pg_get_constraintdef                       
---------------------------------+------------------------------------------------------------------
- constr2_201409_c_excl          | EXCLUDE USING gist (c WITH &&)
- constr2_201409_fid1_fkey       | FOREIGN KEY (fid1, fid2) REFERENCES constr1(id1, id2)
- constr2_201409_partition_check | CHECK ('2014-09-01'::date <= date AND date < '2014-10-01'::date)
- constr2_201409_pkey            | PRIMARY KEY (id)
- constr2_201409_uint_key        | UNIQUE (uint)
- constr2_uint_check             | CHECK (uint > 0)
-(6 rows)
-
+conname|pg_get_constraintdef
+constr2_201409_c_excl|EXCLUDE USING gist (c WITH &&)
+constr2_201409_fid1_fkey|FOREIGN KEY (fid1, fid2) REFERENCES constr1(id1, id2)
+constr2_201409_partition_check|CHECK ('2014-09-01'::date <= date AND date < '2014-10-01'::date)
+constr2_201409_pkey|PRIMARY KEY (id)
+constr2_201409_uint_key|UNIQUE (uint)
+constr2_uint_check|CHECK (uint > 0)
 select pg_get_indexdef(indexrelid) from pg_index
 where indrelid = 'constr2_201409'::regclass
 order by 1;
-                                         pg_get_indexdef                                         
--------------------------------------------------------------------------------------------------
- CREATE INDEX constr2_201409_c_excl ON constr2_201409 USING gist (c)
- CREATE INDEX constr2_201409_iint ON constr2_201409 USING btree (iint) WITH (fillfactor=69)
- CREATE UNIQUE INDEX constr2_201409_pkey ON constr2_201409 USING btree (id) WITH (fillfactor=42)
- CREATE UNIQUE INDEX constr2_201409_somename ON constr2_201409 USING btree (iint) WHERE (id > 0)
- CREATE UNIQUE INDEX constr2_201409_taken1 ON constr2_201409 USING btree (iint) WHERE (id > 1)
- CREATE UNIQUE INDEX constr2_201409_uint_key ON constr2_201409 USING btree (uint)
-(6 rows)
-
+pg_get_indexdef
+CREATE INDEX constr2_201409_c_excl ON constr2_201409 USING gist (c)
+CREATE INDEX constr2_201409_iint ON constr2_201409 USING btree (iint) WITH (fillfactor=69)
+CREATE UNIQUE INDEX constr2_201409_pkey ON constr2_201409 USING btree (id) WITH (fillfactor=42)
+CREATE UNIQUE INDEX constr2_201409_somename ON constr2_201409 USING btree (iint) WHERE (id > 0)
+CREATE UNIQUE INDEX constr2_201409_taken1 ON constr2_201409 USING btree (iint) WHERE (id > 1)
+CREATE UNIQUE INDEX constr2_201409_uint_key ON constr2_201409 USING btree (uint)
 select unnest(reloptions) from pg_class
 where oid = 'constr2_201409'::regclass
 order by 1;
-         unnest          
--------------------------
- autovacuum_enabled=true
- fillfactor=23
-(2 rows)
-
+unnest
+autovacuum_enabled=true
+fillfactor=23
 -- Ownership
 create user u1;
 create user u2;
@@ -280,82 +198,46 @@ $$
     order by 1::text;
 $$;
 select partest.setup('testown.t1', 'date', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('testown.t1', '2014-09-01');
-    create_for     
--------------------
- testown.t1_201409
-(1 row)
-
+create_for
+testown.t1_201409
 select * from comp_acls('testown.t1', 'testown.t1_201409');
-    src_acl    |    tgt_acl    | match 
----------------+---------------+-------
- u1=arwdDxt/u1 | u1=arwdDxt/u1 | t
- u2=ar*/u1     | u2=ar*/u1     | t
- u3=r/u2       | u3=r/u2       | t
- =r/u2         | =r/u2         | t
-(4 rows)
-
+src_acl|tgt_acl|match
+u1=arwdDxt/u1|u1=arwdDxt/u1|t
+u2=ar*/u1|u2=ar*/u1|t
+u3=r/u2|u3=r/u2|t
+=r/u2|=r/u2|t
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
- usename 
----------
- u1
-(1 row)
-
+usename
+u1
 select partest.setup('testown.t2', 'date', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('testown.t2', '2014-09-01');
-    create_for     
--------------------
- testown.t2_201409
-(1 row)
-
+create_for
+testown.t2_201409
 select * from comp_acls('testown.t2', 'testown.t2_201409');
-   src_acl    |   tgt_acl    | match 
---------------+--------------+-------
- u1=arwdxt/u1 | u1=arwdxt/u1 | t
-(1 row)
-
+src_acl|tgt_acl|match
+u1=arwdxt/u1|u1=arwdxt/u1|t
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
- usename 
----------
- u1
-(1 row)
-
+usename
+u1
 select partest.setup('testown.t3', 'date', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('testown.t3', '2014-09-01');
-    create_for     
--------------------
- testown.t3_201409
-(1 row)
-
+create_for
+testown.t3_201409
 select * from comp_acls('testown.t3', 'testown.t3_201409');
- src_acl | tgt_acl | match 
----------+---------+-------
-(0 rows)
-
+src_acl|tgt_acl|match
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
- usename 
----------
- u1
-(1 row)
-
+usename
+u1
 set client_min_messages to 'error';
 drop schema testown cascade;
 reset client_min_messages;
@@ -365,23 +247,14 @@ drop user u3;
 -- Monthly timestamp
 create table monthts (id serial primary key, ts timestamp);
 select partest.setup('monthts', 'ts', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('monthts', '2014-09-01');
-   create_for   
-----------------
- monthts_201409
-(1 row)
-
+create_for
+monthts_201409
 select partest.create_for('monthts', '2014-10-01');
-   create_for   
-----------------
- monthts_201410
-(1 row)
-
+create_for
+monthts_201410
 insert into monthts(ts) values ('2014-08-31T23:59:59.999');
 ERROR:  partition on table monthts missing for ts = '2014-08-31 23:59:59.999'
 HINT:  You should call partest.create_for('monthts', '2014-08-31 23:59:59.999').
@@ -395,23 +268,14 @@ HINT:  You should call partest.create_for('monthts', '2014-11-01 00:00:00').
 -- Monthly timestamptz
 create table monthtstz (id serial primary key, ts timestamptz);
 select partest.setup('monthtstz', 'ts', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('monthtstz', '2014-09-01');
-    create_for    
-------------------
- monthtstz_201409
-(1 row)
-
+create_for
+monthtstz_201409
 select partest.create_for('monthtstz', '2014-10-01');
-    create_for    
-------------------
- monthtstz_201410
-(1 row)
-
+create_for
+monthtstz_201410
 insert into monthtstz(ts) values ('2014-08-31T23:59:59.999');
 ERROR:  partition on table monthtstz missing for ts = '2014-08-31 23:59:59.999-07'
 HINT:  You should call partest.create_for('monthtstz', '2014-08-31 23:59:59.999-07').
@@ -425,23 +289,14 @@ HINT:  You should call partest.create_for('monthtstz', '2014-11-01 00:00:00-07')
 -- Daily date
 create table days (id serial primary key, ts timestamptz);
 select partest.setup('days', 'ts', 'daily', '{{days_per_partition,1}}');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('days', '2014-09-01');
-  create_for   
----------------
- days_20140901
-(1 row)
-
+create_for
+days_20140901
 select partest.create_for('days', '2014-09-02');
-  create_for   
----------------
- days_20140902
-(1 row)
-
+create_for
+days_20140902
 insert into days(ts) values ('2014-08-31T23:59:59.999');
 ERROR:  partition on table days missing for ts = '2014-08-31 23:59:59.999-07'
 HINT:  You should call partest.create_for('days', '2014-08-31 23:59:59.999-07').
@@ -456,23 +311,14 @@ HINT:  You should call partest.create_for('days', '2014-09-03 00:00:00-07').
 create table weeks (id serial primary key, ts date);
 select partest.setup('weeks', 'ts', 'daily',
     '{{days_per_partition,7},{weeks_start_on,6}}');
- setup 
--------
- 
-(1 row)
+setup
 
 select partest.create_for('weeks', '2014-09-12');
-   create_for   
-----------------
- weeks_20140906
-(1 row)
-
+create_for
+weeks_20140906
 select partest.create_for('weeks', '2014-09-13');
-   create_for   
-----------------
- weeks_20140913
-(1 row)
-
+create_for
+weeks_20140913
 insert into weeks(ts) values ('2014-09-05');
 ERROR:  partition on table weeks missing for ts = '2014-09-05'
 HINT:  You should call partest.create_for('weeks', '2014-09-05').

@@ -1,3 +1,5 @@
+\pset format unaligned
+\pset footer off
 set datestyle = 'ISO';
 create schema "s1.s2";
 create extension pgparts with schema "s1.s2";
@@ -7,67 +9,40 @@ create table "s3.s4"."t1.t2" (
     "f1.f2" date not null,
     data text);
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
-     state     | partition 
----------------+-----------
- unpartitioned | 
-(1 row)
-
+state|partition
+unpartitioned|
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
 ERROR:  the table "s3.s4"."t1.t2" has not been prepared for partitions yet
 HINT:  You should call "s1.s2".setup('"s3.s4"."t1.t2"').
 select "s1.s2".setup('"s3.s4"."t1.t2"', 'f1.f2', 'monthly',
     '{{months_per_partiton,3}}');
- setup 
--------
- 
-(1 row)
+setup
 
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
-  state  | partition 
----------+-----------
- missing | 
-(1 row)
-
+state|partition
+missing|
 insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');
 ERROR:  no partition available on table "s3.s4"."t1.t2"
 HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15').
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
-       create_for       
-------------------------
- "s3.s4"."t1.t2_201407"
-(1 row)
-
+create_for
+"s3.s4"."t1.t2_201407"
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
-  state  |       partition        
----------+------------------------
- present | "s3.s4"."t1.t2_201407"
-(1 row)
-
+state|partition
+present|"s3.s4"."t1.t2_201407"
 insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');
 select * from only "s3.s4"."t1.t2";
- id | f1.f2 | data 
-----+-------+------
-(0 rows)
-
+id|f1.f2|data
 select * from only "s3.s4"."t1.t2_201407";
- id  |   f1.f2    | data  
------+------------+-------
- 100 | 2014-09-15 | first
-(1 row)
-
+id|f1.f2|data
+100|2014-09-15|first
 -- Update, no partition change
 update "s3.s4"."t1.t2" set "f1.f2" = '2014-8-15' where id = 100;
 select * from only "s3.s4"."t1.t2";
- id | f1.f2 | data 
-----+-------+------
-(0 rows)
-
+id|f1.f2|data
 select * from only "s3.s4"."t1.t2_201407";
- id  |   f1.f2    | data  
------+------------+-------
- 100 | 2014-08-15 | first
-(1 row)
-
+id|f1.f2|data
+100|2014-08-15|first
 -- Update to fail partition
 update "s3.s4"."t1.t2" set "f1.f2" = '2014-10-15' where id = 100;
 ERROR:  partition on table "s3.s4"."t1.t2" missing for "f1.f2" = '2014-10-15'
@@ -75,54 +50,30 @@ HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-10-15').
 CONTEXT:  SQL statement "insert into "s3.s4"."t1.t2" values (new.*)"
 PL/pgSQL function "s3.s4"."t1.t2_partition_update"() line 4 at SQL statement
 select * from only "s3.s4"."t1.t2";
- id | f1.f2 | data 
-----+-------+------
-(0 rows)
-
+id|f1.f2|data
 select * from only "s3.s4"."t1.t2_201407";
- id  |   f1.f2    | data  
------+------------+-------
- 100 | 2014-08-15 | first
-(1 row)
-
+id|f1.f2|data
+100|2014-08-15|first
 -- Create the missing partition and try again
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-10-15');
-       create_for       
-------------------------
- "s3.s4"."t1.t2_201410"
-(1 row)
-
+create_for
+"s3.s4"."t1.t2_201410"
 update "s3.s4"."t1.t2" set "f1.f2" = '2014-10-15' where id = 100;
 select * from only "s3.s4"."t1.t2";
- id | f1.f2 | data 
-----+-------+------
-(0 rows)
-
+id|f1.f2|data
 select * from only "s3.s4"."t1.t2_201407";
- id | f1.f2 | data 
-----+-------+------
-(0 rows)
-
+id|f1.f2|data
 select * from only "s3.s4"."t1.t2_201410";
- id  |   f1.f2    | data  
------+------------+-------
- 100 | 2014-10-15 | first
-(1 row)
-
+id|f1.f2|data
+100|2014-10-15|first
 -- Detach the partition removes it from writing
 insert into "s3.s4"."t1.t2" values (104, '2014-07-10', 'third');
 select "s1.s2".detach_for('"s3.s4"."t1.t2"', '2014-07-10');
-       detach_for       
-------------------------
- "s3.s4"."t1.t2_201407"
-(1 row)
-
+detach_for
+"s3.s4"."t1.t2_201407"
 -- Partition is there but removed from the base table
 select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10';
- id | f1.f2 | data 
-----+-------+------
-(0 rows)
-
+id|f1.f2|data
 -- Trigger has been maintained
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
 ERROR:  partition on table "s3.s4"."t1.t2" missing for "f1.f2" = '2014-07-10'
@@ -134,19 +85,13 @@ ERROR:  the partition "s3.s4"."t1.t2_201407" exists but is detached
 HINT:  You can attach it back using "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10').
 -- But can attach it back
 select "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10');
-       attach_for       
-------------------------
- "s3.s4"."t1.t2_201407"
-(1 row)
-
+attach_for
+"s3.s4"."t1.t2_201407"
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
 select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10' order by id;
- id  |   f1.f2    |  data  
------+------------+--------
- 104 | 2014-07-10 | third
- 105 | 2014-07-10 | fourth
-(2 rows)
-
+id|f1.f2|data
+104|2014-07-10|third
+105|2014-07-10|fourth
 -- Constraints and indexes
 create table "s3.s4"."constr.1" (id1 int, id2 int, primary key (id1, id2));
 insert into "s3.s4"."constr.1" values (1,2), (3,4);
@@ -166,52 +111,37 @@ create unique index somename on "s3.s4"."constr.2" (iint) where id > 0;
 create unique index taken on "s3.s4"."constr.2" (iint) where id > 1;
 create table "s3.s4"."constr.2_201409_taken" ();
 select "s1.s2".setup('"s3.s4"."constr.2" ', 'date', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select "s1.s2".create_for('"s3.s4"."constr.2" ', '2014-09-01');
-        create_for         
----------------------------
- "s3.s4"."constr.2_201409"
-(1 row)
-
+create_for
+"s3.s4"."constr.2_201409"
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
 where conrelid = '"s3.s4"."constr.2_201409"'::regclass
 order by conname;
-             conname             |                       pg_get_constraintdef                       
----------------------------------+------------------------------------------------------------------
- constr.2_201409_c_excl          | EXCLUDE USING gist (c WITH &&)
- constr.2_201409_fid1_fkey       | FOREIGN KEY (fid1, fid2) REFERENCES "s3.s4"."constr.1"(id1, id2)
- constr.2_201409_partition_check | CHECK ('2014-09-01'::date <= date AND date < '2014-10-01'::date)
- constr.2_201409_pkey            | PRIMARY KEY (id)
- constr.2_201409_uint_key        | UNIQUE (uint)
- constr.2_uint_check             | CHECK (uint > 0)
-(6 rows)
-
+conname|pg_get_constraintdef
+constr.2_201409_c_excl|EXCLUDE USING gist (c WITH &&)
+constr.2_201409_fid1_fkey|FOREIGN KEY (fid1, fid2) REFERENCES "s3.s4"."constr.1"(id1, id2)
+constr.2_201409_partition_check|CHECK ('2014-09-01'::date <= date AND date < '2014-10-01'::date)
+constr.2_201409_pkey|PRIMARY KEY (id)
+constr.2_201409_uint_key|UNIQUE (uint)
+constr.2_uint_check|CHECK (uint > 0)
 select pg_get_indexdef(indexrelid) from pg_index
 where indrelid = '"s3.s4"."constr.2_201409"'::regclass
 order by 1;
-                                                 pg_get_indexdef                                                  
-------------------------------------------------------------------------------------------------------------------
- CREATE INDEX "constr.2_201409_c_excl" ON "s3.s4"."constr.2_201409" USING gist (c)
- CREATE INDEX "constr.2_201409_constr2_iint" ON "s3.s4"."constr.2_201409" USING btree (iint) WITH (fillfactor=69)
- CREATE UNIQUE INDEX "constr.2_201409_pkey" ON "s3.s4"."constr.2_201409" USING btree (id)
- CREATE UNIQUE INDEX "constr.2_201409_somename" ON "s3.s4"."constr.2_201409" USING btree (iint) WHERE (id > 0)
- CREATE UNIQUE INDEX "constr.2_201409_taken1" ON "s3.s4"."constr.2_201409" USING btree (iint) WHERE (id > 1)
- CREATE UNIQUE INDEX "constr.2_201409_uint_key" ON "s3.s4"."constr.2_201409" USING btree (uint)
-(6 rows)
-
+pg_get_indexdef
+CREATE INDEX "constr.2_201409_c_excl" ON "s3.s4"."constr.2_201409" USING gist (c)
+CREATE INDEX "constr.2_201409_constr2_iint" ON "s3.s4"."constr.2_201409" USING btree (iint) WITH (fillfactor=69)
+CREATE UNIQUE INDEX "constr.2_201409_pkey" ON "s3.s4"."constr.2_201409" USING btree (id)
+CREATE UNIQUE INDEX "constr.2_201409_somename" ON "s3.s4"."constr.2_201409" USING btree (iint) WHERE (id > 0)
+CREATE UNIQUE INDEX "constr.2_201409_taken1" ON "s3.s4"."constr.2_201409" USING btree (iint) WHERE (id > 1)
+CREATE UNIQUE INDEX "constr.2_201409_uint_key" ON "s3.s4"."constr.2_201409" USING btree (uint)
 select unnest(reloptions) from pg_class
 where oid = '"s3.s4"."constr.2"'::regclass
 order by 1;
-         unnest          
--------------------------
- autovacuum_enabled=true
- fillfactor=23
-(2 rows)
-
+unnest
+autovacuum_enabled=true
+fillfactor=23
 -- Ownership
 create user "u.1";
 create user "u.2";
@@ -240,55 +170,31 @@ $$
     order by 1::text;
 $$;
 select "s1.s2".setup('"test.own"."t.1"', 'date', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select "s1.s2".create_for('"test.own"."t.1"', '2014-09-01');
-       create_for        
--------------------------
- "test.own"."t.1_201409"
-(1 row)
-
+create_for
+"test.own"."t.1_201409"
 select * from comp_acls('"test.own"."t.1"', '"test.own"."t.1_201409"');
-       src_acl       |       tgt_acl       | match 
----------------------+---------------------+-------
- "u.1"=arwdDxt/"u.1" | "u.1"=arwdDxt/"u.1" | t
- "u.2"=ar*/"u.1"     | "u.2"=ar*/"u.1"     | t
-(2 rows)
-
+src_acl|tgt_acl|match
+"u.1"=arwdDxt/"u.1"|"u.1"=arwdDxt/"u.1"|t
+"u.2"=ar*/"u.1"|"u.2"=ar*/"u.1"|t
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = '"test.own"."t.1"'::regclass;
- usename 
----------
- u.1
-(1 row)
-
+usename
+u.1
 select "s1.s2".setup('"test.own"."t.2"', 'date', 'monthly');
- setup 
--------
- 
-(1 row)
+setup
 
 select "s1.s2".create_for('"test.own"."t.2"', '2014-09-01');
-       create_for        
--------------------------
- "test.own"."t.2_201409"
-(1 row)
-
+create_for
+"test.own"."t.2_201409"
 select * from comp_acls('"test.own"."t.2"', '"test.own"."t.2_201409"');
- src_acl | tgt_acl | match 
----------+---------+-------
-(0 rows)
-
+src_acl|tgt_acl|match
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = '"test.own"."t.2"'::regclass;
- usename 
----------
- u.2
-(1 row)
-
+usename
+u.2
 set client_min_messages to 'error';
 drop schema "test.own" cascade;
 reset client_min_messages;

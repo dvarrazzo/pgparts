@@ -1,3 +1,5 @@
+\pset format unaligned
+\pset footer off
 create schema partest;
 set datestyle = 'ISO';
 

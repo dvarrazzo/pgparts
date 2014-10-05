@@ -1,3 +1,5 @@
+\pset format unaligned
+\pset footer off
 set datestyle = 'ISO';
 
 create schema "s1.s2";
