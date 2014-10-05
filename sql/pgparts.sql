@@ -73,7 +73,8 @@ comment on table partition_schema is
     'Parameter definitions of partitioning schemas';
 
 
-create function _valid_for_type(s text, t regtype) returns bool
+create function
+_valid_for_type(s text, t regtype) returns bool
 language plpgsql immutable as $$
 begin
     if t is not null then
@@ -155,8 +156,8 @@ comment on view existing_partition is
 
 -- Virtual methods dispatch {{{
 
-create function _value2key(
-    field_type regtype, schema_name name, params params, value text)
+create function
+_value2key(field_type regtype, schema_name name, params params, value text)
 returns text language plpgsql stable as $$
 declare
     value2key text;
@@ -173,7 +174,8 @@ begin
 end
 $$;
 
-create function _value2name(
+create function
+_value2name(
     field_type regtype, schema_name name, params params,
     value text, base_name name)
 returns name language plpgsql stable as $$
@@ -194,8 +196,8 @@ begin
 end
 $$;
 
-create function _value2start(
-    field_type regtype, schema_name name, params params, value text)
+create function
+_value2start(field_type regtype, schema_name name, params params, value text)
 returns name language plpgsql stable as $$
 declare
     value2key text;
@@ -214,8 +216,8 @@ begin
 end
 $$;
 
-create function _value2end(
-    field_type regtype, schema_name name, params params, value text)
+create function
+_value2end(field_type regtype, schema_name name, params params, value text)
 returns name language plpgsql stable as $$
 declare
     value2key text;
@@ -239,13 +241,15 @@ $$;
 
 -- Informative functions {{{
 
-create function _table_name("table" regclass) returns name
+create function
+_table_name("table" regclass) returns name
 language sql stable as
 $$
     select relname from pg_class where oid = $1;
 $$;
 
-create function _schema_name("table" regclass) returns name
+create function
+_schema_name("table" regclass) returns name
 language sql stable as
 $$
     select nspname
@@ -254,7 +258,8 @@ $$
     where c.oid = $1;
 $$;
 
-create function _owner_name("table" regclass) returns name
+create function
+_owner_name("table" regclass) returns name
 language sql stable as
 $$
     select usename
@@ -263,7 +268,8 @@ $$
     where c.oid = $1;
 $$;
 
-create function name_for("table" regclass, value text) returns name
+create function
+name_for("table" regclass, value text) returns name
 language sql stable as
 $$
     select @extschema@._value2name(
@@ -274,7 +280,8 @@ $$
     where cfg."table" = name_for."table";
 $$;
 
-create function start_for("table" regclass, value text) returns name
+create function
+start_for("table" regclass, value text) returns name
 language sql stable as
 $$
     select @extschema@._value2start(
@@ -284,7 +291,8 @@ $$
     where cfg."table" = start_for."table";
 $$;
 
-create function end_for("table" regclass, value text) returns name
+create function
+end_for("table" regclass, value text) returns name
 language sql stable as
 $$
     select @extschema@._value2end(
@@ -294,7 +302,8 @@ $$
     where cfg."table" = end_for."table";
 $$;
 
-create function partition_for("table" regclass, value text) returns regclass
+create function
+partition_for("table" regclass, value text) returns regclass
 language sql as
 $$
     select c.oid
@@ -312,7 +321,8 @@ create type partition_info as (
     state @extschema@.partition_state,
     partition regclass);
 
-create function info("table" regclass, value text)
+create function
+info("table" regclass, value text)
 returns @extschema@.partition_info
 language plpgsql stable as
 $$
@@ -344,7 +354,8 @@ begin
 end
 $$;
 
-create function _partitions("table" regclass) returns setof regclass
+create function
+_partitions("table" regclass) returns setof regclass
 language sql as $$
     select p.partition
     from @extschema@.existing_partition p
@@ -357,8 +368,8 @@ $$;
 
 -- Setting up a partitioned table {{{
 
-create function setup(
-    "table" regclass, field name, schema_name name,
+create function
+setup("table" regclass, field name, schema_name name,
     schema_params params default '{}')
 returns void
 language plpgsql as
@@ -441,7 +452,8 @@ end
 $$;
 
 -- TODO: implement bisection access (should be a partitioned table param)
-create function maintain_insert_function("table" regclass) returns void
+create function
+maintain_insert_function("table" regclass) returns void
 language plpgsql as $$
 declare
     nparts int;
@@ -457,7 +469,8 @@ begin
 end
 $$;
 
-create function _maintain_insert_function_empty("table" regclass) returns void
+create function
+_maintain_insert_function_empty("table" regclass) returns void
 language plpgsql as $body$
 declare
     schema name = @extschema@._schema_name("table");
@@ -484,7 +497,8 @@ $f$,
 end
 $body$;
 
-create function _maintain_insert_function_parts("table" regclass) returns void
+create function
+_maintain_insert_function_parts("table" regclass) returns void
 language plpgsql as $body$
 declare
     schema name = @extschema@._schema_name("table");
@@ -532,7 +546,8 @@ $f$,
 end
 $body$;
 
-create function _create_insert_trigger("table" regclass) returns void
+create function
+_create_insert_trigger("table" regclass) returns void
 language plpgsql as $body$
 declare
     sname name = @extschema@._schema_name("table");
@@ -550,7 +565,8 @@ $body$;
 
 -- The function created is used by triggers on the partitions,
 -- not on the base table
-create function _create_update_function("table" regclass) returns void
+create function
+_create_update_function("table" regclass) returns void
 language plpgsql as $body$
 declare
     sname name = @extschema@._schema_name("table");
@@ -589,7 +605,8 @@ $body$;
 
 -- Setting up a partition {{{
 
-create function create_for("table" regclass, value text) returns regclass
+create function
+create_for("table" regclass, value text) returns regclass
 language plpgsql as
 $$
 declare
@@ -649,7 +666,8 @@ begin
 end
 $$;
 
-create function detach_for("table" regclass, value text) returns regclass
+create function
+detach_for("table" regclass, value text) returns regclass
 language plpgsql as
 $body$
 declare
@@ -671,7 +689,8 @@ begin
 end
 $body$;
 
-create function attach_for("table" regclass, value text) returns regclass
+create function
+attach_for("table" regclass, value text) returns regclass
 language plpgsql as
 $body$
 declare
@@ -694,7 +713,8 @@ end
 $body$;
 
 
-create function _copy_to_subtable("table" regclass, value text) returns regclass
+create function
+_copy_to_subtable("table" regclass, value text) returns regclass
 language plpgsql as
 $$
 declare
@@ -718,7 +738,8 @@ begin
 end
 $$;
 
-create function _create_partition_update_trigger(partition regclass) returns void
+create function
+_create_partition_update_trigger(partition regclass) returns void
 language plpgsql as $f$
 declare
     base_table regclass;
@@ -750,7 +771,8 @@ begin
 end
 $f$;
 
-create function _constraint_partition(partition regclass) returns void
+create function
+_constraint_partition(partition regclass) returns void
 language plpgsql as $f$
 declare
     partname name := @extschema@._table_name(partition);
@@ -798,7 +820,8 @@ insert into schema_param values (
 
 -- TODO: fix timezones! At least UTF, maybe a zone param. Note that regression
 -- test is performed in a "strange" timezone: see resulting tables' checks.
-create function _month2key(params params, value timestamptz) returns int
+create function
+_month2key(params params, value timestamptz) returns int
 language sql stable as
 $$
     select ((12 * date_part('year', $2) + date_part('month', $2) - 1)::int
@@ -806,7 +829,8 @@ $$
         * @extschema@._param_value(params, 'months_per_partiton')::int;
 $$;
 
-create function _month2start(params params, key int) returns date
+create function
+_month2start(params params, key int) returns date
 language sql stable as
 $$
     select ('0001-01-01'::date
@@ -814,14 +838,16 @@ $$
         - '1 year'::interval)::date;
 $$;
 
-create function _month2end(params params, key int) returns date
+create function
+_month2end(params params, key int) returns date
 language sql stable as $$
     select (@extschema@._month2start(params, key)
         + '1 month'::interval
         * @extschema@._param_value(params, 'months_per_partiton')::int)::date;
 $$;
 
-create function _month2name(params params, key int, base_name name)
+create function
+_month2name(params params, key int, base_name name)
 returns name language sql stable as
 $$
     select (base_name || '_'
@@ -865,7 +891,8 @@ $$Day of the week each partition starts if 'days_per_partition' = 7.
 As is extract('dow' from date), 0 is Sunday, 6 is Saturday.
 $$);
 
-create function _day2key(params params, value timestamptz) returns int
+create function
+_day2key(params params, value timestamptz) returns int
 language sql stable as
 $$
     -- The 3 makes weekly partitions starting on Sunday with offset 0
@@ -877,21 +904,24 @@ $$
         * @extschema@._param_value(params, 'days_per_partition')::int;
 $$;
 
-create function _day2start(params params, key int) returns date
+create function
+_day2start(params params, key int) returns date
 language sql stable as
 $$
     select ('epoch'::date + '1 day'::interval * (key + 3
         + @extschema@._param_value(params, 'weeks_start_on')::int))::date;
 $$;
 
-create function _day2end(params params, key int) returns date
+create function
+_day2end(params params, key int) returns date
 language sql stable as $$
     select (@extschema@._day2start(params, key)
         + '1 day'::interval
         * @extschema@._param_value(params, 'days_per_partition')::int)::date;
 $$;
 
-create function _day2name(params params, key int, base_name name)
+create function
+_day2name(params params, key int, base_name name)
 returns name language sql stable as
 $$
     select (base_name || '_'
@@ -921,7 +951,8 @@ insert into _schema_vtable values (
 -- These are useful enough to deserve to be publicly accessible
 -- (maybe they deserve an extension of itself)
 
-create function make_unique_relname(schema name, name name) returns name
+create function
+make_unique_relname(schema name, name name) returns name
 language plpgsql stable as $$
 declare
     orig name = name;
@@ -937,8 +968,8 @@ begin
 end
 $$;
 
-create function copy_constraints(
-    src regclass, tgt regclass, exclude_types text[] default '{}')
+create function
+copy_constraints(src regclass, tgt regclass, exclude_types text[] default '{}')
 returns void
 language plpgsql as $$
 declare
@@ -955,7 +986,8 @@ begin
 end
 $$;
 
-create function copy_indexes(src regclass, tgt regclass) returns void
+create function
+copy_indexes(src regclass, tgt regclass) returns void
 language plpgsql as $body$
 declare
     isrcname name;
@@ -1002,7 +1034,8 @@ begin
 end
 $body$;
 
-create function copy_owner(src regclass, tgt regclass) returns void
+create function
+copy_owner(src regclass, tgt regclass) returns void
 language plpgsql as $$
 declare
     osrc name = @extschema@._owner_name(src);
@@ -1014,7 +1047,8 @@ begin
 end
 $$;
 
-create function copy_permissions(src regclass, tgt regclass) returns void
+create function
+copy_permissions(src regclass, tgt regclass) returns void
 language plpgsql as $$
 declare
     grantee text;
