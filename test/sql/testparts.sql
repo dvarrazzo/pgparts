@@ -70,7 +70,7 @@ select * from sometbl where day = '2014-07-10' order by id;
 -- Idempotent
 select partest.attach_for('sometbl', '2014-07-10');
 
--- Constraints and indexes
+-- Constraints, indexes, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);
 create table constr2 (
@@ -83,9 +83,11 @@ create table constr2 (
     iint int,
     c circle,
     exclude using gist (c with &&)
-);
+) with (autovacuum_enabled = true, fillfactor = 23);
 
-create index constr2_iint on constr2(iint);
+alter index constr2_pkey set (fillfactor = 42);
+
+create index constr2_iint on constr2(iint) with (fillfactor = 69);
 create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
@@ -99,6 +101,10 @@ order by conname;
 
 select pg_get_indexdef(indexrelid) from pg_index
 where indrelid = 'constr2_201409'::regclass
+order by 1;
+
+select unnest(reloptions) from pg_class
+where oid = 'constr2_201409'::regclass
 order by 1;
 
 -- Ownership

@@ -68,9 +68,9 @@ create table "s3.s4"."constr.2" (
     iint int,
     c circle,
     exclude using gist (c with &&)
-);
+) with (autovacuum_enabled = true, fillfactor = 23);
 
-create index constr2_iint on "s3.s4"."constr.2" (iint);
+create index constr2_iint on "s3.s4"."constr.2" (iint) with (fillfactor = 69);
 create unique index somename on "s3.s4"."constr.2" (iint) where id > 0;
 create unique index taken on "s3.s4"."constr.2" (iint) where id > 1;
 create table "s3.s4"."constr.2_201409_taken" ();
@@ -84,6 +84,10 @@ order by conname;
 
 select pg_get_indexdef(indexrelid) from pg_index
 where indrelid = '"s3.s4"."constr.2_201409"'::regclass
+order by 1;
+
+select unnest(reloptions) from pg_class
+where oid = '"s3.s4"."constr.2"'::regclass
 order by 1;
 
 -- Ownership

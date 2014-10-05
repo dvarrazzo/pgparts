@@ -160,8 +160,8 @@ create table "s3.s4"."constr.2" (
     iint int,
     c circle,
     exclude using gist (c with &&)
-);
-create index constr2_iint on "s3.s4"."constr.2" (iint);
+) with (autovacuum_enabled = true, fillfactor = 23);
+create index constr2_iint on "s3.s4"."constr.2" (iint) with (fillfactor = 69);
 create unique index somename on "s3.s4"."constr.2" (iint) where id > 0;
 create unique index taken on "s3.s4"."constr.2" (iint) where id > 1;
 create table "s3.s4"."constr.2_201409_taken" ();
@@ -193,15 +193,24 @@ order by conname;
 select pg_get_indexdef(indexrelid) from pg_index
 where indrelid = '"s3.s4"."constr.2_201409"'::regclass
 order by 1;
-                                                pg_get_indexdef                                                
----------------------------------------------------------------------------------------------------------------
+                                                 pg_get_indexdef                                                  
+------------------------------------------------------------------------------------------------------------------
  CREATE INDEX "constr.2_201409_c_excl" ON "s3.s4"."constr.2_201409" USING gist (c)
- CREATE INDEX "constr.2_201409_constr2_iint" ON "s3.s4"."constr.2_201409" USING btree (iint)
+ CREATE INDEX "constr.2_201409_constr2_iint" ON "s3.s4"."constr.2_201409" USING btree (iint) WITH (fillfactor=69)
  CREATE UNIQUE INDEX "constr.2_201409_pkey" ON "s3.s4"."constr.2_201409" USING btree (id)
  CREATE UNIQUE INDEX "constr.2_201409_somename" ON "s3.s4"."constr.2_201409" USING btree (iint) WHERE (id > 0)
  CREATE UNIQUE INDEX "constr.2_201409_taken1" ON "s3.s4"."constr.2_201409" USING btree (iint) WHERE (id > 1)
  CREATE UNIQUE INDEX "constr.2_201409_uint_key" ON "s3.s4"."constr.2_201409" USING btree (uint)
 (6 rows)
+
+select unnest(reloptions) from pg_class
+where oid = '"s3.s4"."constr.2"'::regclass
+order by 1;
+         unnest          
+-------------------------
+ autovacuum_enabled=true
+ fillfactor=23
+(2 rows)
 
 -- Ownership
 create user "u.1";

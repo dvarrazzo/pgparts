@@ -242,6 +242,16 @@ $$;
 -- Informative functions {{{
 
 create function
+_table_oid(schema name, name name) returns regclass
+language sql stable strict as
+$$
+    select c.oid
+    from pg_class c
+    join pg_namespace n on n.oid = relnamespace
+    where nspname = $1 and relname = $2;
+$$;
+
+create function
 _table_name("table" regclass) returns name
 language sql stable as
 $$
@@ -306,11 +316,9 @@ create function
 partition_for("table" regclass, value text) returns regclass
 language sql as
 $$
-    select c.oid
-    from pg_class c
-    join pg_namespace n on c.relnamespace = n.oid
-    where relname = @extschema@.name_for("table", value)
-    and nspname = @extschema@._schema_name("table");
+    select @extschema@._table_oid(
+        @extschema@._schema_name("table"),
+        @extschema@.name_for("table", value));
 $$;
 
 
@@ -730,8 +738,7 @@ begin
     perform @extschema@.copy_indexes("table", partition);
     perform @extschema@.copy_owner("table", partition);
     perform @extschema@.copy_permissions("table", partition);
-    -- TODO: inherit the rest
-    -- perform @extschema@._copy_attributes("table", partition);
+    perform @extschema@.copy_options("table", partition);
 
     -- Return the oid of the new table
     return partition;
@@ -973,15 +980,37 @@ copy_constraints(src regclass, tgt regclass, exclude_types text[] default '{}')
 returns void
 language plpgsql as $$
 declare
+    indid oid;
+    newindid oid;
+    oldidxs oid[];
     stmt text;
 begin
-    for stmt in select
-        format('alter table %s add %s', tgt, pg_get_constraintdef(oid))
-    from pg_constraint where
-    conrelid = src
-    and contype <> any (exclude_types)
+    for indid, stmt in
+        -- the conindid for fkeys is the referenced index, not a local one
+        select case when contype <> 'f' then conindid else 0 end,
+            format('alter table %s add %s', tgt, pg_get_constraintdef(oid))
+        from pg_constraint
+        where conrelid = src
+        and contype <> any (exclude_types)
     loop
+        if indid <> 0 then
+            -- We don't know the name of the new constraint, so we have to
+            -- look for a new index oid.
+            select coalesce(array_agg(indexrelid), '{}') from pg_index
+            where indrelid = tgt
+            into strict oldidxs;
+        end if;
+
         execute stmt;
+
+        if indid <> 0 then
+            select indexrelid from pg_index
+            where indrelid = tgt
+            and not indexrelid = any(oldidxs)
+            into strict newindid;
+
+            perform @extschema@.copy_options(indid, newindid);
+        end if;
     end loop;
 end
 $$;
@@ -998,8 +1027,8 @@ declare
     schema name = @extschema@._schema_name(tgt);
     parts text[];
 begin
-    for isrcname, indexdef in select
-        ic.relname, pg_get_indexdef(indexrelid)
+    for isrcname, indexdef in
+        select ic.relname, pg_get_indexdef(i.indexrelid)
         from pg_index i
         join pg_class ic on ic.oid = i.indexrelid
         where indrelid = src
@@ -1029,6 +1058,11 @@ begin
         into strict parts;
         execute format('%s%I%s%s%s',
             parts[1], itgtname, parts[3], tgt, parts[5]);
+
+        -- Copy the index options too
+        perform @extschema@.copy_options(
+            @extschema@._table_oid(schema, isrcname),
+            @extschema@._table_oid(schema, itgtname));
 
     end loop;
 end
@@ -1110,6 +1144,25 @@ begin
 end
 $$;
 
+create function
+copy_options(src regclass, tgt regclass) returns void
+language plpgsql as $$
+declare
+    kind text;
+    opt text;
+begin
+    for kind, opt in
+    select case
+        when relkind = 'r' then 'table'
+        when relkind = 'i' then 'index' end,
+        unnest(reloptions)
+    from pg_class
+    where oid = src
+    and relkind in ('r', 'i') loop
+        execute format('alter %s %s set (%s)', kind, tgt, opt);
+    end loop;
+end;
+$$;
 
 -- }}}
 
