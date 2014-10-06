@@ -1183,14 +1183,14 @@ begin
         select
             p.grantee,
             case when current_user <> p.grantor then
-                format('set session authorization %s', p.grantor) end
+                format('set role %s', p.grantor) end
                     as set_sess,
             format (
                 'grant %s on table %s to %s%s', perm, tgt, p.grantee,
                 case when grant_opt then ' with grant option' else '' end)
                     as grant,
             case when current_user <> p.grantor then
-                'reset session authorization'::text end as reset_sess
+                'reset role'::text end as reset_sess
         from pretty p
     loop
         -- For each grantee, revoke all his roles and set them from scratch.
