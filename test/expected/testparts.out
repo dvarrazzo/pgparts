@@ -54,7 +54,7 @@ id|day|data
 100|2014-08-15|first
 -- Update to fail partition
 update sometbl set day = '2014-10-15' where id = 100;
-ERROR:  partition on table sometbl missing for day = '2014-10-15'
+ERROR:  partition public.sometbl_201410 missing for day = '2014-10-15'
 HINT:  You should call partest.create_for('sometbl', '2014-10-15').
 CONTEXT:  SQL statement "insert into public.sometbl values (new.*)"
 PL/pgSQL function sometbl_partition_update() line 4 at SQL statement
@@ -88,7 +88,7 @@ id|day|data
 104|2014-07-10|third
 -- Trigger has been maintained
 insert into sometbl values (105, '2014-07-10', 'fourth');
-ERROR:  partition on table sometbl missing for day = '2014-07-10'
+ERROR:  partition public.sometbl_201407 missing for day = '2014-07-10'
 HINT:  You should call partest.create_for('sometbl', '2014-07-10').
 insert into sometbl values (106, '2014-10-10', 'fifth');
 -- Idempotent
@@ -256,14 +256,14 @@ select partest.create_for('monthts', '2014-10-01');
 create_for
 monthts_201410
 insert into monthts(ts) values ('2014-08-31T23:59:59.999');
-ERROR:  partition on table monthts missing for ts = '2014-08-31 23:59:59.999'
+ERROR:  partition public.monthts_201408 missing for ts = '2014-08-31 23:59:59.999'
 HINT:  You should call partest.create_for('monthts', '2014-08-31 23:59:59.999').
 insert into monthts(ts) values ('2014-09-01');
 insert into monthts(ts) values ('2014-09-30T23:59:59.999');
 insert into monthts(ts) values ('2014-10-01');
 insert into monthts(ts) values ('2014-10-31T23:59:59.999');
 insert into monthts(ts) values ('2014-11-01');
-ERROR:  partition on table monthts missing for ts = '2014-11-01 00:00:00'
+ERROR:  partition public.monthts_201411 missing for ts = '2014-11-01 00:00:00'
 HINT:  You should call partest.create_for('monthts', '2014-11-01 00:00:00').
 -- Monthly timestamptz
 create table monthtstz (id serial primary key, ts timestamptz);
@@ -277,14 +277,14 @@ select partest.create_for('monthtstz', '2014-10-01');
 create_for
 monthtstz_201410
 insert into monthtstz(ts) values ('2014-08-31T23:59:59.999Z');
-ERROR:  partition on table monthtstz missing for ts = '2014-08-31 16:59:59.999-07'
+ERROR:  partition public.monthtstz_201408 missing for ts = '2014-08-31 16:59:59.999-07'
 HINT:  You should call partest.create_for('monthtstz', '2014-08-31 16:59:59.999-07').
 insert into monthtstz(ts) values ('2014-09-01Z');
 insert into monthtstz(ts) values ('2014-09-30T23:59:59.999Z');
 insert into monthtstz(ts) values ('2014-10-01Z');
 insert into monthtstz(ts) values ('2014-10-31T23:59:59.999Z');
 insert into monthtstz(ts) values ('2014-11-01Z');
-ERROR:  partition on table monthtstz missing for ts = '2014-10-31 17:00:00-07'
+ERROR:  partition public.monthtstz_201410 missing for ts = '2014-10-31 17:00:00-07'
 HINT:  You should call partest.create_for('monthtstz', '2014-10-31 17:00:00-07').
 -- Daily timestamptz
 create table days (id serial primary key, ts timestamptz);
@@ -298,14 +298,14 @@ select partest.create_for('days', '2014-09-02');
 create_for
 days_20140902
 insert into days(ts) values ('2014-08-31T23:59:59.999Z');
-ERROR:  partition on table days missing for ts = '2014-08-31 16:59:59.999-07'
+ERROR:  partition public.days_20140831 missing for ts = '2014-08-31 16:59:59.999-07'
 HINT:  You should call partest.create_for('days', '2014-08-31 16:59:59.999-07').
 insert into days(ts) values ('2014-09-01Z');
 insert into days(ts) values ('2014-09-01T23:59:59.999Z');
 insert into days(ts) values ('2014-09-02Z');
 insert into days(ts) values ('2014-09-02T23:59:59.999Z');
 insert into days(ts) values ('2014-09-03Z');
-ERROR:  partition on table days missing for ts = '2014-09-02 17:00:00-07'
+ERROR:  partition public.days_20140902 missing for ts = '2014-09-02 17:00:00-07'
 HINT:  You should call partest.create_for('days', '2014-09-02 17:00:00-07').
 -- Weeks starting on Saturdays
 create table weeks (id serial primary key, ts date);
@@ -320,13 +320,13 @@ select partest.create_for('weeks', '2014-09-13');
 create_for
 weeks_20140913
 insert into weeks(ts) values ('2014-09-05');
-ERROR:  partition on table weeks missing for ts = '2014-09-05'
+ERROR:  partition public.weeks_20140830 missing for ts = '2014-09-05'
 HINT:  You should call partest.create_for('weeks', '2014-09-05').
 insert into weeks(ts) values ('2014-09-06');
 insert into weeks(ts) values ('2014-09-12');
 insert into weeks(ts) values ('2014-09-13');
 insert into weeks(ts) values ('2014-09-19');
 insert into weeks(ts) values ('2014-09-20');
-ERROR:  partition on table weeks missing for ts = '2014-09-20'
+ERROR:  partition public.weeks_20140920 missing for ts = '2014-09-20'
 HINT:  You should call partest.create_for('weeks', '2014-09-20').
 drop extension pgparts;

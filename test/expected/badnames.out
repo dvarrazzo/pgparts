@@ -45,7 +45,7 @@ id|f1.f2|data
 100|2014-08-15|first
 -- Update to fail partition
 update "s3.s4"."t1.t2" set "f1.f2" = '2014-10-15' where id = 100;
-ERROR:  partition on table "s3.s4"."t1.t2" missing for "f1.f2" = '2014-10-15'
+ERROR:  partition "s3.s4"."t1.t2_201410" missing for "f1.f2" = '2014-10-15'
 HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-10-15').
 CONTEXT:  SQL statement "insert into "s3.s4"."t1.t2" values (new.*)"
 PL/pgSQL function "s3.s4"."t1.t2_partition_update"() line 4 at SQL statement
@@ -76,7 +76,7 @@ select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10';
 id|f1.f2|data
 -- Trigger has been maintained
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
-ERROR:  partition on table "s3.s4"."t1.t2" missing for "f1.f2" = '2014-07-10'
+ERROR:  partition "s3.s4"."t1.t2_201407" missing for "f1.f2" = '2014-07-10'
 HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-07-10').
 insert into "s3.s4"."t1.t2" values (106, '2014-10-10', 'fifth');
 -- Can't create the same partition again

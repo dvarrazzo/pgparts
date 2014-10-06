@@ -542,15 +542,16 @@ begin
 %s
     raise using
         message = format(
-            $m$partition on table %s missing for %I = %%L$m$, new.%I),
+            $m$partition %I.%%I missing for %I = %%L$m$,
+            @extschema@.name_for(%L::regclass, new.%I::text), new.%I),
         hint = format(
             $m$You should call @extschema@.create_for(%L, %%L).$m$, new.%I);
 end
 $$
 $f$,
         schema, fname, checks,
-        "table", field, field, "table", field);
-
+        schema, field, "table", field, field,
+        "table", field);
 end
 $body$;
 
