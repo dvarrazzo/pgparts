@@ -614,11 +614,25 @@ $body$;
 -- Setting up a partition {{{
 
 create function
+_cast(value text, type regtype) returns text
+language plpgsql immutable strict as
+$$
+declare
+    rv text;
+begin
+    execute format('select %L::%s::text', value, type)
+    into strict rv;
+    return rv;
+end
+$$;
+
+create function
 create_for("table" regclass, value text) returns regclass
 language plpgsql as
 $$
 declare
     pname name;
+    type regtype;
     info @extschema@.partition_info;
     partition regclass;
 begin
@@ -652,14 +666,17 @@ begin
 
         -- Insert the data about the partition in the table; the other
         -- functions will get the details from here
+        select field_type from @extschema@.partitioned_table t
+            where t."table" = create_for."table"
+            into strict type;
         insert into @extschema@.partition
             (schema_name, table_name, base_table, start_value, end_value)
         values (
             @extschema@._schema_name(partition),
             @extschema@._table_name(partition),
             "table",
-            @extschema@.start_for("table", value),
-            @extschema@.end_for("table", value));
+            @extschema@._cast(@extschema@.start_for("table", value), type),
+            @extschema@._cast(@extschema@.end_for("table", value), type));
 
         perform @extschema@._constraint_partition(partition);
         perform @extschema@._create_partition_update_trigger(partition);
@@ -811,6 +828,9 @@ create domain positive_integer as integer
 create domain day_of_week as integer
     constraint valid_dow check (0 <= value and value <= 6);
 
+create domain timezone as text
+    constraint valid_timezone check
+        ((('2014-01-01'::timestamp) at time zone value) is not null);
 
 insert into partition_schema values ('monthly',
 $$Each partition of the table contains one or more months.
@@ -825,8 +845,13 @@ insert into schema_param values (
     'monthly', 'months_per_partiton', '@extschema@.positive_integer', '1',
     'Number of months contained in each partition.');
 
--- TODO: fix timezones! At least UTF, maybe a zone param. Note that regression
--- test is performed in a "strange" timezone: see resulting tables' checks.
+insert into schema_param values (
+    'monthly', 'timezone', '@extschema@.timezone', 'UTC',
+$$The time zone of the partitions boundaries.
+
+Only used if the partitioned field type is timestamp with time zone.$$);
+
+
 create function
 _month2key(params params, value timestamptz) returns int
 language sql stable as
@@ -871,10 +896,31 @@ insert into _schema_vtable values (
     '@extschema@._month2key', '@extschema@._month2name',
     '@extschema@._month2start', '@extschema@._month2end');
 
+
+create function
+_month2starttz(params params, key int) returns timestamptz
+language sql stable as
+$$
+    select ('0001-01-01'::date
+        + '1 month'::interval * key
+        - '1 year'::interval)
+            at time zone @extschema@._param_value(params, 'timezone');
+$$;
+
+create function
+_month2endtz(params params, key int) returns timestamptz
+language sql stable as $$
+    select ('0001-01-01'::date
+        + '1 month'::interval * (key
+            + @extschema@._param_value(params, 'months_per_partiton')::int)
+        - '1 year'::interval)
+            at time zone @extschema@._param_value(params, 'timezone');
+$$;
+
 insert into _schema_vtable values (
     'monthly', 'timestamptz'::regtype,
     '@extschema@._month2key', '@extschema@._month2name',
-    '@extschema@._month2start', '@extschema@._month2end');
+    '@extschema@._month2starttz', '@extschema@._month2endtz');
 
 
 
@@ -897,6 +943,13 @@ $$Day of the week each partition starts if 'days_per_partition' = 7.
 
 As is extract('dow' from date), 0 is Sunday, 6 is Saturday.
 $$);
+
+insert into schema_param values (
+    'daily', 'timezone', '@extschema@.timezone', 'UTC',
+$$The time zone of the partitions boundaries.
+
+Only used if the partitioned field type is timestamp with time zone.$$);
+
 
 create function
 _day2key(params params, value timestamptz) returns int
@@ -945,10 +998,28 @@ insert into _schema_vtable values (
     '@extschema@._day2key', '@extschema@._day2name',
     '@extschema@._day2start', '@extschema@._day2end');
 
+
+create function
+_day2starttz(params params, key int) returns timestamptz
+language sql stable as
+$$
+    select ('epoch'::date + '1 day'::interval * (key + 3
+        + @extschema@._param_value(params, 'weeks_start_on')::int))
+        at time zone @extschema@._param_value(params, 'timezone');
+$$;
+
+create function
+_day2endtz(params params, key int) returns timestamptz
+language sql stable as $$
+    select ('epoch'::date + '1 day'::interval * (key + 4
+        + @extschema@._param_value(params, 'weeks_start_on')::int))
+        at time zone @extschema@._param_value(params, 'timezone');
+$$;
+
 insert into _schema_vtable values (
     'daily', 'timestamptz'::regtype,
     '@extschema@._day2key', '@extschema@._day2name',
-    '@extschema@._day2start', '@extschema@._day2end');
+    '@extschema@._day2starttz', '@extschema@._day2endtz');
 
 
 -- }}}

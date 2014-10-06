@@ -276,17 +276,17 @@ monthtstz_201409
 select partest.create_for('monthtstz', '2014-10-01');
 create_for
 monthtstz_201410
-insert into monthtstz(ts) values ('2014-08-31T23:59:59.999');
-ERROR:  partition on table monthtstz missing for ts = '2014-08-31 23:59:59.999-07'
-HINT:  You should call partest.create_for('monthtstz', '2014-08-31 23:59:59.999-07').
-insert into monthtstz(ts) values ('2014-09-01');
-insert into monthtstz(ts) values ('2014-09-30T23:59:59.999');
-insert into monthtstz(ts) values ('2014-10-01');
-insert into monthtstz(ts) values ('2014-10-31T23:59:59.999');
-insert into monthtstz(ts) values ('2014-11-01');
-ERROR:  partition on table monthtstz missing for ts = '2014-11-01 00:00:00-07'
-HINT:  You should call partest.create_for('monthtstz', '2014-11-01 00:00:00-07').
--- Daily date
+insert into monthtstz(ts) values ('2014-08-31T23:59:59.999Z');
+ERROR:  partition on table monthtstz missing for ts = '2014-08-31 16:59:59.999-07'
+HINT:  You should call partest.create_for('monthtstz', '2014-08-31 16:59:59.999-07').
+insert into monthtstz(ts) values ('2014-09-01Z');
+insert into monthtstz(ts) values ('2014-09-30T23:59:59.999Z');
+insert into monthtstz(ts) values ('2014-10-01Z');
+insert into monthtstz(ts) values ('2014-10-31T23:59:59.999Z');
+insert into monthtstz(ts) values ('2014-11-01Z');
+ERROR:  partition on table monthtstz missing for ts = '2014-10-31 17:00:00-07'
+HINT:  You should call partest.create_for('monthtstz', '2014-10-31 17:00:00-07').
+-- Daily timestamptz
 create table days (id serial primary key, ts timestamptz);
 select partest.setup('days', 'ts', 'daily', '{{days_per_partition,1}}');
 setup
@@ -297,16 +297,16 @@ days_20140901
 select partest.create_for('days', '2014-09-02');
 create_for
 days_20140902
-insert into days(ts) values ('2014-08-31T23:59:59.999');
-ERROR:  partition on table days missing for ts = '2014-08-31 23:59:59.999-07'
-HINT:  You should call partest.create_for('days', '2014-08-31 23:59:59.999-07').
-insert into days(ts) values ('2014-09-01');
-insert into days(ts) values ('2014-09-01T23:59:59.999');
-insert into days(ts) values ('2014-09-02');
-insert into days(ts) values ('2014-09-02T23:59:59.999');
-insert into days(ts) values ('2014-09-03');
-ERROR:  partition on table days missing for ts = '2014-09-03 00:00:00-07'
-HINT:  You should call partest.create_for('days', '2014-09-03 00:00:00-07').
+insert into days(ts) values ('2014-08-31T23:59:59.999Z');
+ERROR:  partition on table days missing for ts = '2014-08-31 16:59:59.999-07'
+HINT:  You should call partest.create_for('days', '2014-08-31 16:59:59.999-07').
+insert into days(ts) values ('2014-09-01Z');
+insert into days(ts) values ('2014-09-01T23:59:59.999Z');
+insert into days(ts) values ('2014-09-02Z');
+insert into days(ts) values ('2014-09-02T23:59:59.999Z');
+insert into days(ts) values ('2014-09-03Z');
+ERROR:  partition on table days missing for ts = '2014-09-02 17:00:00-07'
+HINT:  You should call partest.create_for('days', '2014-09-02 17:00:00-07').
 -- Weeks starting on Saturdays
 create table weeks (id serial primary key, ts date);
 select partest.setup('weeks', 'ts', 'daily',

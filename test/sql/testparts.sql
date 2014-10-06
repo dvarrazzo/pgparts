@@ -187,24 +187,24 @@ create table monthtstz (id serial primary key, ts timestamptz);
 select partest.setup('monthtstz', 'ts', 'monthly');
 select partest.create_for('monthtstz', '2014-09-01');
 select partest.create_for('monthtstz', '2014-10-01');
-insert into monthtstz(ts) values ('2014-08-31T23:59:59.999');
-insert into monthtstz(ts) values ('2014-09-01');
-insert into monthtstz(ts) values ('2014-09-30T23:59:59.999');
-insert into monthtstz(ts) values ('2014-10-01');
-insert into monthtstz(ts) values ('2014-10-31T23:59:59.999');
-insert into monthtstz(ts) values ('2014-11-01');
+insert into monthtstz(ts) values ('2014-08-31T23:59:59.999Z');
+insert into monthtstz(ts) values ('2014-09-01Z');
+insert into monthtstz(ts) values ('2014-09-30T23:59:59.999Z');
+insert into monthtstz(ts) values ('2014-10-01Z');
+insert into monthtstz(ts) values ('2014-10-31T23:59:59.999Z');
+insert into monthtstz(ts) values ('2014-11-01Z');
 
--- Daily date
+-- Daily timestamptz
 create table days (id serial primary key, ts timestamptz);
 select partest.setup('days', 'ts', 'daily', '{{days_per_partition,1}}');
 select partest.create_for('days', '2014-09-01');
 select partest.create_for('days', '2014-09-02');
-insert into days(ts) values ('2014-08-31T23:59:59.999');
-insert into days(ts) values ('2014-09-01');
-insert into days(ts) values ('2014-09-01T23:59:59.999');
-insert into days(ts) values ('2014-09-02');
-insert into days(ts) values ('2014-09-02T23:59:59.999');
-insert into days(ts) values ('2014-09-03');
+insert into days(ts) values ('2014-08-31T23:59:59.999Z');
+insert into days(ts) values ('2014-09-01Z');
+insert into days(ts) values ('2014-09-01T23:59:59.999Z');
+insert into days(ts) values ('2014-09-02Z');
+insert into days(ts) values ('2014-09-02T23:59:59.999Z');
+insert into days(ts) values ('2014-09-03Z');
 
 -- Weeks starting on Saturdays
 create table weeks (id serial primary key, ts date);
