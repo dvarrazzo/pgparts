@@ -856,7 +856,9 @@ create function
 _month2key(params params, value timestamptz) returns int
 language sql stable as
 $$
-    select ((12 * date_part('year', $2) + date_part('month', $2) - 1)::int
+    select
+        ((12 * (date_part('year', $2) - 1970)
+            + date_part('month', $2) - 1)::int
         / @extschema@._param_value(params, 'nmonths')::int)
         * @extschema@._param_value(params, 'nmonths')::int;
 $$;
@@ -865,9 +867,7 @@ create function
 _month2start(params params, key int) returns date
 language sql stable as
 $$
-    select ('0001-01-01'::date
-        + '1 month'::interval * key
-        - '1 year'::interval)::date;
+    select ('epoch'::date + '1 month'::interval * key)::date;
 $$;
 
 create function
@@ -901,19 +901,15 @@ create function
 _month2starttz(params params, key int) returns timestamptz
 language sql stable as
 $$
-    select ('0001-01-01'::date
-        + '1 month'::interval * key
-        - '1 year'::interval)
-            at time zone @extschema@._param_value(params, 'timezone');
+    select ('epoch'::date + '1 month'::interval * key)
+        at time zone @extschema@._param_value(params, 'timezone');
 $$;
 
 create function
 _month2endtz(params params, key int) returns timestamptz
 language sql stable as $$
-    select ('0001-01-01'::date
-        + '1 month'::interval * (key
-            + @extschema@._param_value(params, 'nmonths')::int)
-        - '1 year'::interval)
+    select ('epoch'::date + '1 month'::interval
+        * (key + @extschema@._param_value(params, 'nmonths')::int))
             at time zone @extschema@._param_value(params, 'timezone');
 $$;
 
