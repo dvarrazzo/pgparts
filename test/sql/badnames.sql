@@ -15,7 +15,7 @@ create table "s3.s4"."t1.t2" (
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
 select "s1.s2".setup('"s3.s4"."t1.t2"', 'f1.f2', 'monthly',
-    '{{months_per_partiton,3}}');
+    '{{nmonths,3}}');
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
 
 insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');

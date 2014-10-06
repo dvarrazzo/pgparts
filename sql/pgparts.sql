@@ -842,7 +842,7 @@ number of partitions.
 $$);
 
 insert into schema_param values (
-    'monthly', 'months_per_partiton', '@extschema@.positive_integer', '1',
+    'monthly', 'nmonths', '@extschema@.positive_integer', '1',
     'Number of months contained in each partition.');
 
 insert into schema_param values (
@@ -857,8 +857,8 @@ _month2key(params params, value timestamptz) returns int
 language sql stable as
 $$
     select ((12 * date_part('year', $2) + date_part('month', $2) - 1)::int
-        / @extschema@._param_value(params, 'months_per_partiton')::int)
-        * @extschema@._param_value(params, 'months_per_partiton')::int;
+        / @extschema@._param_value(params, 'nmonths')::int)
+        * @extschema@._param_value(params, 'nmonths')::int;
 $$;
 
 create function
@@ -875,7 +875,7 @@ _month2end(params params, key int) returns date
 language sql stable as $$
     select (@extschema@._month2start(params, key)
         + '1 month'::interval
-        * @extschema@._param_value(params, 'months_per_partiton')::int)::date;
+        * @extschema@._param_value(params, 'nmonths')::int)::date;
 $$;
 
 create function
@@ -912,7 +912,7 @@ _month2endtz(params params, key int) returns timestamptz
 language sql stable as $$
     select ('0001-01-01'::date
         + '1 month'::interval * (key
-            + @extschema@._param_value(params, 'months_per_partiton')::int)
+            + @extschema@._param_value(params, 'nmonths')::int)
         - '1 year'::interval)
             at time zone @extschema@._param_value(params, 'timezone');
 $$;
@@ -934,14 +934,14 @@ number of partitions.
 $$);
 
 insert into schema_param values (
-    'daily', 'days_per_partition', '@extschema@.positive_integer', '1',
+    'daily', 'ndays', '@extschema@.positive_integer', '1',
     'Number of days contained in each partition.');
 
 insert into schema_param values (
-    'daily', 'weeks_start_on', '@extschema@.day_of_week', '0',
-$$Day of the week each partition starts if 'days_per_partition' = 7.
+    'daily', 'start_dow', '@extschema@.day_of_week', '0',
+$$Day of the week each partition starts if 'ndays' = 7.
 
-As is extract('dow' from date), 0 is Sunday, 6 is Saturday.
+Consistently with extract('dow' from date), 0 is Sunday, 6 is Saturday.
 $$);
 
 insert into schema_param values (
@@ -959,9 +959,9 @@ $$
     -- which is consistent with extract(dow), if anything.
     select
         (((value::date - 'epoch'::date)::int
-            - @extschema@._param_value(params, 'weeks_start_on')::int - 3)
-        / @extschema@._param_value(params, 'days_per_partition')::int)
-        * @extschema@._param_value(params, 'days_per_partition')::int;
+            - @extschema@._param_value(params, 'start_dow')::int - 3)
+        / @extschema@._param_value(params, 'ndays')::int)
+        * @extschema@._param_value(params, 'ndays')::int;
 $$;
 
 create function
@@ -969,7 +969,7 @@ _day2start(params params, key int) returns date
 language sql stable as
 $$
     select ('epoch'::date + '1 day'::interval * (key + 3
-        + @extschema@._param_value(params, 'weeks_start_on')::int))::date;
+        + @extschema@._param_value(params, 'start_dow')::int))::date;
 $$;
 
 create function
@@ -977,7 +977,7 @@ _day2end(params params, key int) returns date
 language sql stable as $$
     select (@extschema@._day2start(params, key)
         + '1 day'::interval
-        * @extschema@._param_value(params, 'days_per_partition')::int)::date;
+        * @extschema@._param_value(params, 'ndays')::int)::date;
 $$;
 
 create function
@@ -1004,7 +1004,7 @@ _day2starttz(params params, key int) returns timestamptz
 language sql stable as
 $$
     select ('epoch'::date + '1 day'::interval * (key + 3
-        + @extschema@._param_value(params, 'weeks_start_on')::int))
+        + @extschema@._param_value(params, 'start_dow')::int))
         at time zone @extschema@._param_value(params, 'timezone');
 $$;
 
@@ -1012,7 +1012,7 @@ create function
 _day2endtz(params params, key int) returns timestamptz
 language sql stable as $$
     select ('epoch'::date + '1 day'::interval * (key + 4
-        + @extschema@._param_value(params, 'weeks_start_on')::int))
+        + @extschema@._param_value(params, 'start_dow')::int))
         at time zone @extschema@._param_value(params, 'timezone');
 $$;
 

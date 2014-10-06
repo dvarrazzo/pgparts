@@ -16,14 +16,14 @@ HINT:  You should call partest.setup('sometbl').
 -- We don't know this schema
 select partest.setup('sometbl', 'day', 'derp');
 ERROR:  partitioning schema derp on type date not known
-select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
 setup
 
 select * from partest.info('sometbl', '2014-09-15');
 state|partition
 missing|
 -- Setup works once
-select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
 ERROR:  the table sometbl is already prepared for partitions
 HINT:  Use partest.create_for('sometbl', VALUE) to create new partitions on the table.
 -- This insert fails
@@ -131,7 +131,7 @@ create index constr2_iint on constr2(iint) with (fillfactor = 69);
 create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
-select partest.setup('constr2', 'date', 'monthly', '{{months_per_partiton,1}}');
+select partest.setup('constr2', 'date', 'monthly', '{{nmonths,1}}');
 setup
 
 select partest.create_for('constr2', '2014-09-01');
@@ -288,7 +288,7 @@ ERROR:  partition on table monthtstz missing for ts = '2014-10-31 17:00:00-07'
 HINT:  You should call partest.create_for('monthtstz', '2014-10-31 17:00:00-07').
 -- Daily timestamptz
 create table days (id serial primary key, ts timestamptz);
-select partest.setup('days', 'ts', 'daily', '{{days_per_partition,1}}');
+select partest.setup('days', 'ts', 'daily', '{{ndays,1}}');
 setup
 
 select partest.create_for('days', '2014-09-01');
@@ -310,7 +310,7 @@ HINT:  You should call partest.create_for('days', '2014-09-02 17:00:00-07').
 -- Weeks starting on Saturdays
 create table weeks (id serial primary key, ts date);
 select partest.setup('weeks', 'ts', 'daily',
-    '{{days_per_partition,7},{weeks_start_on,6}}');
+    '{{ndays,7},{start_dow,6}}');
 setup
 
 select partest.create_for('weeks', '2014-09-12');

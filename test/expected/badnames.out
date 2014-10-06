@@ -15,7 +15,7 @@ select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
 ERROR:  the table "s3.s4"."t1.t2" has not been prepared for partitions yet
 HINT:  You should call "s1.s2".setup('"s3.s4"."t1.t2"').
 select "s1.s2".setup('"s3.s4"."t1.t2"', 'f1.f2', 'monthly',
-    '{{months_per_partiton,3}}');
+    '{{nmonths,3}}');
 setup
 
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');

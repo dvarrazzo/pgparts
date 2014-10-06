@@ -17,11 +17,11 @@ select partest.create_for('sometbl', '2014-09-15');
 -- We don't know this schema
 select partest.setup('sometbl', 'day', 'derp');
 
-select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
 select * from partest.info('sometbl', '2014-09-15');
 
 -- Setup works once
-select partest.setup('sometbl', 'day', 'monthly', '{{months_per_partiton,3}}');
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
 
 -- This insert fails
 insert into sometbl values (100, '2014-09-15', 'first');
@@ -94,7 +94,7 @@ create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
 
-select partest.setup('constr2', 'date', 'monthly', '{{months_per_partiton,1}}');
+select partest.setup('constr2', 'date', 'monthly', '{{nmonths,1}}');
 select partest.create_for('constr2', '2014-09-01');
 
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
@@ -196,7 +196,7 @@ insert into monthtstz(ts) values ('2014-11-01Z');
 
 -- Daily timestamptz
 create table days (id serial primary key, ts timestamptz);
-select partest.setup('days', 'ts', 'daily', '{{days_per_partition,1}}');
+select partest.setup('days', 'ts', 'daily', '{{ndays,1}}');
 select partest.create_for('days', '2014-09-01');
 select partest.create_for('days', '2014-09-02');
 insert into days(ts) values ('2014-08-31T23:59:59.999Z');
@@ -209,7 +209,7 @@ insert into days(ts) values ('2014-09-03Z');
 -- Weeks starting on Saturdays
 create table weeks (id serial primary key, ts date);
 select partest.setup('weeks', 'ts', 'daily',
-    '{{days_per_partition,7},{weeks_start_on,6}}');
+    '{{ndays,7},{start_dow,6}}');
 select partest.create_for('weeks', '2014-09-12');
 select partest.create_for('weeks', '2014-09-13');
 insert into weeks(ts) values ('2014-09-05');
