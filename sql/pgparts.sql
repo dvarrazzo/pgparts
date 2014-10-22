@@ -279,6 +279,16 @@ $$
 $$;
 
 create function
+_has_pkey("table" regclass) returns bool
+language sql stable as
+$$
+    select exists (
+        select 1 from pg_constraint c
+        where conrelid = "table"
+        and contype = 'p');
+$$;
+
+create function
 name_for("table" regclass, value text) returns name
 language sql stable as
 $$
@@ -450,7 +460,9 @@ begin
 
         perform @extschema@.maintain_insert_function("table");
         perform @extschema@._create_insert_trigger("table");
-        perform @extschema@._create_update_function("table");
+        if @extschema@._has_pkey("table") then
+            perform @extschema@._create_update_function("table");
+        end if;
 
     exception
         -- you can't have this clause empty
@@ -573,7 +585,7 @@ end
 $body$;
 
 -- The function created is used by triggers on the partitions,
--- not on the base table
+-- not on the base table. The table must have a primary key.
 create function
 _create_update_function("table" regclass) returns void
 language plpgsql as $body$
@@ -590,10 +602,7 @@ begin
     from pg_constraint c
     join pg_attribute a on attrelid = conrelid and attnum = any (conkey)
     where conrelid = "table" and contype = 'p'
-    into pkey;
-    if pkey is null then
-        raise 'the table % doesn''t have a primary key', "table";
-    end if;
+    into strict pkey;
 
     execute format($f$
         create function %I.%I() returns trigger language plpgsql as $$
@@ -680,7 +689,9 @@ begin
             @extschema@._cast(@extschema@.end_for("table", value), type));
 
         perform @extschema@._constraint_partition(partition);
-        perform @extschema@._create_partition_update_trigger(partition);
+        if @extschema@._has_pkey("table") then
+            perform @extschema@._create_partition_update_trigger(partition);
+        end if;
         perform @extschema@.maintain_insert_function("table");
 
     exception
