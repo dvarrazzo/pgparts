@@ -1,0 +1,47 @@
+\pset format unaligned
+\pset footer off
+create schema prange;
+set datestyle = 'ISO';
+create extension pgparts with schema prange;
+create table rangetbl (
+    id serial primary key,
+    range tstzrange not null,
+    data text);
+select prange.setup('rangetbl', 'range', 'monthly');
+setup
+
+-- This insert fails
+insert into rangetbl values (100, '[2014-09-15Z,2014-09-16Z)', 'first');
+ERROR:  no partition available on table rangetbl
+HINT:  You should call prange.create_for('rangetbl', '["2014-09-14 17:00:00-07","2014-09-15 17:00:00-07")').
+select * from only rangetbl;
+id|range|data
+select prange.create_for('rangetbl', '2014-09-15');
+create_for
+rangetbl_201409
+select * from prange.info('rangetbl', '2014-09-15');
+state|partition
+present|rangetbl_201409
+-- Insert
+insert into rangetbl values (100, '[2014-09-15Z,2014-09-16Z)', 'first');
+select * from only rangetbl;
+id|range|data
+select * from only rangetbl_201409;
+id|range|data
+100|["2014-09-14 17:00:00-07","2014-09-15 17:00:00-07")|first
+-- Split
+insert into rangetbl values (101, '[2014-09-20Z,2014-10-10Z)', 'second');
+ERROR:  partition public.rangetbl_201409 missing for range = '["2014-09-30 17:00:00-07","2014-10-09 17:00:00-07")'
+HINT:  You should call prange.create_for('rangetbl', '2014-09-30 17:00:00-07').
+select prange.create_for('rangetbl', '2014-10-10');
+create_for
+rangetbl_201410
+insert into rangetbl values (101, '[2014-09-20Z,2014-10-10Z)', 'second');
+select * from only rangetbl_201409;
+id|range|data
+100|["2014-09-14 17:00:00-07","2014-09-15 17:00:00-07")|first
+101|["2014-09-19 17:00:00-07","2014-09-30 17:00:00-07")|second
+select * from only rangetbl_201410;
+id|range|data
+101|["2014-09-30 17:00:00-07","2014-10-09 17:00:00-07")|second
+drop extension pgparts;

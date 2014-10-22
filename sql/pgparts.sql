@@ -152,6 +152,7 @@ select c.oid::regclass as partition,
 comment on view existing_partition is
     'The partition tables that have not been dropped from the database';
 
+
 -- }}}
 
 -- Virtual methods dispatch {{{
@@ -190,7 +191,8 @@ begin
     into strict value2key, key2name;
 
     execute 'select ' || key2name
-        || '($1, ' || value2key || '($1, $2::' || field_type || '), $3)'
+        || '($1, ' || value2key || '($1, $2::'
+        || @extschema@._base_type(field_type) || '), $3)'
     into strict rv using params, value, base_name;
     return rv;
 end
@@ -210,7 +212,8 @@ begin
     into strict value2key, key2start;
 
     execute 'select ' || key2start
-        || '($1, ' || value2key || '($1, $2::' || field_type || '))'
+        || '($1, ' || value2key || '($1, $2::'
+        || @extschema@._base_type(field_type) || '))'
     into strict rv using params, value;
     return rv;
 end
@@ -230,9 +233,48 @@ begin
     into strict value2key, key2end;
 
     execute 'select ' || key2end
-        || '($1, ' || value2key || '($1, $2::' || field_type || '))'
+        || '($1, ' || value2key || '($1, $2::'
+        || @extschema@._base_type(field_type) || '))'
     into strict rv using params, value;
     return rv;
+end
+$$;
+
+
+create function
+_scalar_predicate(partition regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format('%L <= %s%I and %s%I < %L',
+        p.start_value, prefix, t.field, prefix, t.field, p.end_value)
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    where p.partition = $1
+$f$;
+
+create function
+_range_predicate(partition regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format($$%s%I <@ '[%s,%s)'$$,
+        prefix, t.field, p.start_value, p.end_value)
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    where p.partition = $1
+$f$;
+
+create function
+_check_predicate(partition regclass, prefix text default '') returns text
+language plpgsql as $$
+declare
+    fname text;
+    rv text;
+begin
+    if @extschema@._is_range(@extschema@._partition_field_type(partition)) then
+        return @extschema@._range_predicate(partition, prefix);
+    else
+        return @extschema@._scalar_predicate(partition, prefix);
+    end if;
 end
 $$;
 
@@ -287,6 +329,44 @@ $$
         where conrelid = "table"
         and contype = 'p');
 $$;
+
+
+create function
+_is_range(type regtype) returns boolean
+language plpgsql stable as
+$$
+begin
+    if current_setting('server_version_num')::int >= 90200 then
+        return exists (select 1 from pg_range where rngtypid = type);
+    else
+        return false;
+    end if;
+end
+$$;
+
+create function
+_base_type(type regtype) returns regtype
+language plpgsql stable as
+$$
+declare
+    rv regtype;
+begin
+    if current_setting('server_version_num')::int >= 90200 then
+        select rngsubtype::regtype from pg_range
+        where rngtypid = type
+        into rv;
+        if found then
+            return rv;
+        end if;
+    end if;
+
+    return type;
+end
+$$;
+
+comment on function _base_type(regtype) is
+$$If the input type is a range, return its base type, else return the input.$$;
+
 
 create function
 name_for("table" regclass, value text) returns name
@@ -374,11 +454,47 @@ $$;
 
 create function
 _partitions("table" regclass) returns setof regclass
-language sql as $$
+language sql as
+$$
     select p.partition
     from @extschema@.existing_partition p
     join pg_inherits i on p.partition = inhrelid
     where p.base_table = "table" and inhparent = "table";
+$$;
+
+
+create function
+_partition_field_type(t regclass) returns regtype
+language plpgsql as
+$$
+declare
+    rv regtype;
+begin
+    select t.field_type
+    from @extschema@.partitioned_table t
+    where t."table" = $1
+    into rv;
+    if found then
+        return rv;
+    end if;
+
+    select t.field_type
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    where p.partition = $1
+    into rv;
+    if found then
+        return rv;
+    end if;
+
+    raise 'the table % is not a partitioned table or a partition', t;
+end
+$$;
+
+comment on function _partition_field_type(regclass) is
+$$Return the type of the partitioning field for a table.
+
+The input table can be either a partitioned table or a partition.
 $$;
 
 
@@ -484,7 +600,11 @@ begin
     if nparts = 0 then
         perform @extschema@._maintain_insert_function_empty("table");
     else
-        perform @extschema@._maintain_insert_function_parts("table");
+        if @extschema@._is_range(@extschema@._partition_field_type("table")) then
+            perform @extschema@._maintain_insert_function_range("table");
+        else
+            perform @extschema@._maintain_insert_function_scalar("table");
+        end if;
     end if;
 end
 $$;
@@ -517,8 +637,26 @@ $f$,
 end
 $body$;
 
+
 create function
-_maintain_insert_function_parts("table" regclass) returns void
+_scalar_insert_snippet(partition regclass) returns text
+language sql stable as
+$f$
+    select format(
+$$
+    if %s then
+        insert into %I.%I values (new.*);
+        return null;
+    end if;
+$$,
+        @extschema@._scalar_predicate(p.partition, 'new.'),
+        p.schema_name, p.table_name)
+    from @extschema@.existing_partition p
+    where p.partition = $1
+$f$;
+
+create function
+_maintain_insert_function_scalar("table" regclass) returns void
 language plpgsql as $body$
 declare
     schema name = @extschema@._schema_name("table");
@@ -527,23 +665,15 @@ declare
     checks text;
 begin
     select t.field from @extschema@.partitioned_table t
-    where t."table" = _maintain_insert_function_parts."table"
+    where t."table" = $1
     into strict field;
 
-    with checks(body) as (
-        select format(
-$c$
-    if %L <= new.%I and new.%I < %L then
-        insert into %I.%I values (new.*);
-        return null;
-    end if;
-$c$,
-            p.start_value, field, field, p.end_value,
-            p.schema_name, p.table_name)
+    select array_to_string(array_agg(s), '')
+    from (
+        select @extschema@._scalar_insert_snippet(p.partition) s
         from @extschema@.existing_partition p
         where p.partition in (select @extschema@._partitions("table"))
-        order by p.partition::text desc)
-    select array_to_string(array_agg(body), '') from checks
+        order by p.partition::text desc) x
     into strict checks;
 
     execute format(
@@ -566,6 +696,87 @@ $f$,
         "table", field);
 end
 $body$;
+
+
+create function
+_range_insert_snippet(partition regclass) returns text
+language sql stable as
+$f$
+    select format(
+$$
+    if %L && new.%I then
+        if %L @> new.%I then
+            insert into %I.%I values (new.*);
+            return null;
+        else
+            rest = new.%I - %L;
+            new.%I = new.%I * %L;
+            insert into %I.%I values (new.*);
+            new.%I = rest;
+        end if;
+    end if;
+$$,
+        range, field, range, field,         -- if, if
+        schema_name, table_name,            -- insert into
+        field, range, field, field, range,  -- rest =, new.x =
+        schema_name, table_name, field)     -- insert into
+    from (select
+        t.field, p.schema_name, p.table_name,
+            format('[%s,%s)', p.start_value, p.end_value) as range
+        from @extschema@.existing_partition p
+        join @extschema@.partitioned_table t on t."table" = p.base_table
+        where p.partition = $1) x
+$f$;
+
+-- TODO: if a partition is missing the error message is not very informative:
+-- "result of range difference would not be contiguous"
+create function
+_maintain_insert_function_range("table" regclass) returns void
+language plpgsql as $body$
+declare
+    schema name = @extschema@._schema_name("table");
+    fname name = @extschema@._table_name("table") || '_partition_insert';
+    field name;
+    type regtype;
+    checks text;
+begin
+    select t.field, t.field_type from @extschema@.partitioned_table t
+    where t."table" = $1
+    into strict field, type;
+
+    select array_to_string(array_agg(s), '')
+    from (
+        select @extschema@._range_insert_snippet(p.partition) s
+        from @extschema@.existing_partition p
+        where p.partition in (select @extschema@._partitions("table"))
+        order by p.partition::text desc) x
+    into strict checks;
+
+    execute format(
+$f$
+create or replace function %I.%I()
+returns trigger language plpgsql as $$
+declare
+    rest %I;
+begin
+%s
+    raise using
+        message = format(
+            $m$partition %I.%%I missing for %I = %%L$m$,
+            @extschema@.name_for(%L::regclass, lower(new.%I)::text), new.%I),
+        hint = format(
+            $m$You should call @extschema@.create_for(%L, %%L).$m$,
+            lower(new.%I));
+end
+$$
+$f$,
+        schema, fname, type, checks,
+        schema, field, "table", field, field,
+        "table", field);
+end
+$body$;
+
+
 
 create function
 _create_insert_trigger("table" regclass) returns void
@@ -685,8 +896,12 @@ begin
             @extschema@._schema_name(partition),
             @extschema@._table_name(partition),
             "table",
-            @extschema@._cast(@extschema@.start_for("table", value), type),
-            @extschema@._cast(@extschema@.end_for("table", value), type));
+            @extschema@._cast(
+                @extschema@.start_for("table", value),
+                @extschema@._base_type(type)),
+            @extschema@._cast(
+                @extschema@.end_for("table", value),
+                @extschema@._base_type(type)));
 
         perform @extschema@._constraint_partition(partition);
         if @extschema@._has_pkey("table") then
@@ -706,7 +921,7 @@ $$;
 create function
 detach_for("table" regclass, value text) returns regclass
 language plpgsql as
-$body$
+$$
 declare
     partition regclass = @extschema@.partition_for("table", value);
 begin
@@ -724,12 +939,12 @@ begin
 
     return partition;
 end
-$body$;
+$$;
 
 create function
 attach_for("table" regclass, value text) returns regclass
 language plpgsql as
-$body$
+$$
 declare
     partition regclass = @extschema@.partition_for("table", value);
 begin
@@ -747,7 +962,7 @@ begin
 
     return partition;
 end
-$body$;
+$$;
 
 
 create function
@@ -776,40 +991,38 @@ $$;
 
 create function
 _create_partition_update_trigger(partition regclass) returns void
-language plpgsql as $f$
+language plpgsql as
+$$
 declare
-    base_table regclass;
-    field name;
-    start_value text;
-    end_value text;
     fname name;
     sname name;
     -- It should be the last of the triggers "before"
     -- But don't use a 'zzz' prefix as it clashes with pg_repack
     tname name = 'yyy_partition_update';
 begin
-    select t.field, p.start_value, p.end_value,
+    select
         -- Defined by _create_update_function() in setup()
         @extschema@._table_name(p.base_table) || '_partition_update',
         @extschema@._schema_name(p.base_table)
     from @extschema@.existing_partition p
-    join @extschema@.partitioned_table t on p.base_table = t."table"
     where p.partition = _create_partition_update_trigger.partition
-    into strict field, start_value, end_value, fname, sname;
+    into strict fname, sname;
 
     execute format($t$
         create trigger %I before update on %s
-        for each row when (not (%L <= new.%I and new.%I < %L))
+        for each row when (not (%s))
         execute procedure %I.%I();
-        $t$, tname, partition,
-        start_value, field, field, end_value,
+        $t$,
+        tname, partition,
+        @extschema@._check_predicate(partition, 'new.'),
         sname, fname);
 end
-$f$;
+$$;
 
 create function
 _constraint_partition(partition regclass) returns void
-language plpgsql as $f$
+language plpgsql as
+$$
 declare
     partname name := @extschema@._table_name(partition);
     field name;
@@ -823,11 +1036,11 @@ begin
     into strict field, start_value, end_value;
 
     execute format(
-        'alter table %s add constraint %I check (%L <= %I and %I < %L)',
+        'alter table %s add constraint %I check (%s)',
         partition, partname || '_partition_check',
-        start_value, field, field, end_value);
+        @extschema@._check_predicate(partition));
 end
-$f$;
+$$;
 
 
 -- }}}
@@ -930,6 +1143,10 @@ insert into _schema_vtable values (
     '@extschema@._month2key', '@extschema@._month2name',
     '@extschema@._month2starttz', '@extschema@._month2endtz');
 
+insert into _schema_vtable values (
+    'monthly', 'tstzrange'::regtype,
+    '@extschema@._month2key', '@extschema@._month2name',
+    '@extschema@._month2starttz', '@extschema@._month2endtz');
 
 
 insert into partition_schema values ('daily',

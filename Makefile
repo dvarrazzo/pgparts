@@ -9,7 +9,7 @@ EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/def
 
 DATA         = $(filter-out $(wildcard sql/*--*.sql),$(wildcard sql/*.sql))
 # DOCS         = $(wildcard doc/*.rst)
-REGRESS      = testparts badnames
+REGRESS      = testparts badnames testrange
 REGRESS_OPTS = --inputdir=test --load-language=plpgsql
 PG_CONFIG    = pg_config
 PG91         = $(shell $(PG_CONFIG) --version | grep -qE " 8\.| 9\.0" && echo no || echo yes)
