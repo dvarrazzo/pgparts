@@ -59,6 +59,8 @@ create table partition_schema (
 comment on table partition_schema is
     'The partitioning schemas the system knows';
 
+grant select on partition_schema to public;
+
 
 create table schema_param (
     schema name,
@@ -71,6 +73,8 @@ create table schema_param (
 
 comment on table partition_schema is
     'Parameter definitions of partitioning schemas';
+
+grant select on schema_param to public;
 
 
 create function
@@ -108,6 +112,8 @@ create table _schema_vtable (
     key2end name not null
 );
 
+grant select on _schema_vtable to public;
+
 
 create table partitioned_table (
     "table" regclass primary key,
@@ -127,6 +133,8 @@ comment on table partitioned_table is
 -- Include in pg_dump
 select pg_catalog.pg_extension_config_dump('partitioned_table', '');
 
+grant select on partitioned_table to public;
+
 
 create table partition (
     schema_name name,
@@ -141,6 +149,8 @@ comment on table partition is
 
 select pg_catalog.pg_extension_config_dump('partition', '');
 
+grant select on partition to public;
+
 
 create view existing_partition as
 select c.oid::regclass as partition,
@@ -151,6 +161,8 @@ select c.oid::regclass as partition,
 
 comment on view existing_partition is
     'The partition tables that have not been dropped from the database';
+
+grant select on existing_partition to public;
 
 
 -- }}}
