@@ -1123,6 +1123,14 @@ insert into _schema_vtable values (
 
 
 create function
+_month2keytz(params params, value timestamptz) returns int
+language sql stable as
+$$
+    select @extschema@._month2key(params,
+        value at time zone @extschema@._param_value(params, 'timezone'));
+$$;
+
+create function
 _month2starttz(params params, key int) returns timestamptz
 language sql stable as
 $$
@@ -1140,12 +1148,12 @@ $$;
 
 insert into _schema_vtable values (
     'monthly', 'timestamptz'::regtype,
-    '@extschema@._month2key', '@extschema@._month2name',
+    '@extschema@._month2keytz', '@extschema@._month2name',
     '@extschema@._month2starttz', '@extschema@._month2endtz');
 
 insert into _schema_vtable values (
     'monthly', 'tstzrange'::regtype,
-    '@extschema@._month2key', '@extschema@._month2name',
+    '@extschema@._month2keytz', '@extschema@._month2name',
     '@extschema@._month2starttz', '@extschema@._month2endtz');
 
 
@@ -1225,6 +1233,14 @@ insert into _schema_vtable values (
 
 
 create function
+_day2keytz(params params, value timestamptz) returns int
+language sql stable as
+$$
+    select @extschema@._day2key(params,
+        value at time zone @extschema@._param_value(params, 'timezone'));
+$$;
+
+create function
 _day2starttz(params params, key int) returns timestamptz
 language sql stable as
 $$
@@ -1243,7 +1259,7 @@ $$;
 
 insert into _schema_vtable values (
     'daily', 'timestamptz'::regtype,
-    '@extschema@._day2key', '@extschema@._day2name',
+    '@extschema@._day2keytz', '@extschema@._day2name',
     '@extschema@._day2starttz', '@extschema@._day2endtz');
 
 
