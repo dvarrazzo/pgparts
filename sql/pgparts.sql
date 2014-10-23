@@ -1134,16 +1134,15 @@ create function
 _month2starttz(params params, key int) returns timestamptz
 language sql stable as
 $$
-    select ('epoch'::date + '1 month'::interval * key)
+    select @extschema@._month2start(params, key)::timestamp
         at time zone @extschema@._param_value(params, 'timezone');
 $$;
 
 create function
 _month2endtz(params params, key int) returns timestamptz
 language sql stable as $$
-    select ('epoch'::date + '1 month'::interval
-        * (key + @extschema@._param_value(params, 'nmonths')::int))
-            at time zone @extschema@._param_value(params, 'timezone');
+    select @extschema@._month2end(params, key)::timestamp
+        at time zone @extschema@._param_value(params, 'timezone');
 $$;
 
 insert into _schema_vtable values (
@@ -1244,16 +1243,14 @@ create function
 _day2starttz(params params, key int) returns timestamptz
 language sql stable as
 $$
-    select ('epoch'::date + '1 day'::interval * (key + 3
-        + @extschema@._param_value(params, 'start_dow')::int))
+    select @extschema@._day2start(params, key)::timestamp
         at time zone @extschema@._param_value(params, 'timezone');
 $$;
 
 create function
 _day2endtz(params params, key int) returns timestamptz
 language sql stable as $$
-    select ('epoch'::date + '1 day'::interval * (key + 4
-        + @extschema@._param_value(params, 'start_dow')::int))
+    select @extschema@._day2end(params, key)::timestamp
         at time zone @extschema@._param_value(params, 'timezone');
 $$;
 
