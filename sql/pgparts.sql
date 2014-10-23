@@ -570,9 +570,8 @@ begin
             end if;
         end loop;
 
-        insert into @extschema@.partitioned_table
-            ("table", field, field_type, schema_name, schema_params)
-        values ("table", field, field_type, schema_name, schema_params);
+        perform @extschema@._register_partitioned_table(
+            "table", field, field_type, schema_name, schema_params);
 
         perform @extschema@.maintain_insert_function("table");
         perform @extschema@._create_insert_trigger("table");
@@ -586,6 +585,21 @@ begin
     end;
 end
 $$;
+
+create function
+_register_partitioned_table(
+    "table" regclass, field name, field_type regtype,
+    schema_name text, schema_params params) returns void
+language plpgsql security definer as
+$$
+begin
+    insert into @extschema@.partitioned_table
+        ("table", field, field_type, schema_name, schema_params)
+    values
+        ("table", field, field_type, schema_name, schema_params);
+end
+$$;
+
 
 -- TODO: implement bisection access (should be a partitioned table param)
 create function
@@ -890,9 +904,8 @@ begin
         select field_type from @extschema@.partitioned_table t
             where t."table" = create_for."table"
             into strict type;
-        insert into @extschema@.partition
-            (schema_name, table_name, base_table, start_value, end_value)
-        values (
+
+        perform @extschema@._register_partition(
             @extschema@._schema_name(partition),
             @extschema@._table_name(partition),
             "table",
@@ -915,6 +928,20 @@ begin
     end;
 
     return partition;
+end
+$$;
+
+create function
+_register_partition(
+    schema_name name, table_name name, base_table regclass,
+    start_value text, end_value text) returns void
+language plpgsql security definer as
+$$
+begin
+    insert into @extschema@.partition
+        (schema_name, table_name, base_table, start_value, end_value)
+    values
+        (schema_name, table_name, base_table, start_value, end_value);
 end
 $$;
 
