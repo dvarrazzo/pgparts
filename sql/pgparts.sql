@@ -786,6 +786,10 @@ declare
     rest %I;
 begin
 %s
+    if new.%I = 'empty' then
+        raise $m$the field %I cannot be 'empty'$m$;
+    end if;
+
     raise using
         message = format(
             $m$partition %I.%%I missing for %I = %%L$m$,
@@ -797,6 +801,7 @@ end
 $$
 $f$,
         schema, fname, type, checks,
+        field, field,
         schema, field, "table", field, field,
         "table", field);
 end
