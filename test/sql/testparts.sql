@@ -141,7 +141,8 @@ $$
         where oid = $2
         order by 1::text)
     select *, src_acl = tgt_acl
-    from src full outer join tgt on src_acl = tgt_acl
+    from src full outer join tgt on
+        split_part(src_acl::text, '=', 1) = split_part(tgt_acl::text, '=', 1)
     order by 1::text;
 $$;
 

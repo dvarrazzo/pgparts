@@ -194,7 +194,8 @@ $$
         where oid = $2
         order by 1::text)
     select *, src_acl = tgt_acl
-    from src full outer join tgt on src_acl = tgt_acl
+    from src full outer join tgt on
+        split_part(src_acl::text, '=', 1) = split_part(tgt_acl::text, '=', 1)
     order by 1::text;
 $$;
 select partest.setup('testown.t1', 'date', 'monthly');
@@ -208,10 +209,8 @@ select * from comp_acls('testown.t1', 'testown.t1_201409');
 src_acl|tgt_acl|match
 u1=arwdDxt/u1|u1=arwdDxt/u1|t
 u2=ar*/u1|u2=ar*/u1|t
-u3=r/u2||
-=r/u2||
-|=r/u1|
-|u3=r/u1|
+u3=r/u2|u3=r/u1|f
+=r/u2|=r/u1|f
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
 usename
