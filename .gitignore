@@ -2,3 +2,4 @@
 /regression.out
 /results
 /sql/pgparts--*.sql
+!/sql/pgparts--*--*.sql
