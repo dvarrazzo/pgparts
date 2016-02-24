@@ -1521,11 +1521,9 @@ $$;
 
 -- Public utility functions {{{
 
-create function public.foreach_table(
-    schema_name text, name_pattern text, statement text)
-returns void
-language plpgsql
-as $$
+create function
+foreach_table(schema_name text, name_pattern text, statement text) returns void
+language plpgsql as $$
 -- Perform *statement* for each table matching the pattern
 declare
     t regclass;
