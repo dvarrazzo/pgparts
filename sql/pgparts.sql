@@ -1486,13 +1486,15 @@ begin
             execute format('revoke all on %s from %s', tgt, grantee);
             prev_grantee = grantee;
         end if;
-        if set_sess is not null then
-            execute set_sess;
-        end if;
+        -- Avoid trying to restore the grantor, as it will fail
+        -- in security definer functions (issue #1)
+        -- if set_sess is not null then
+        --     execute set_sess;
+        -- end if;
         execute "grant";
-        if reset_sess is not null then
-            execute reset_sess;
-        end if;
+        -- if reset_sess is not null then
+        --     execute reset_sess;
+        -- end if;
     end loop;
 end
 $$;

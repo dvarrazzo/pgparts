@@ -203,12 +203,15 @@ setup
 select partest.create_for('testown.t1', '2014-09-01');
 create_for
 testown.t1_201409
+-- Note: failure to restore grantor because of issue #1
 select * from comp_acls('testown.t1', 'testown.t1_201409');
 src_acl|tgt_acl|match
 u1=arwdDxt/u1|u1=arwdDxt/u1|t
 u2=ar*/u1|u2=ar*/u1|t
-u3=r/u2|u3=r/u2|t
-=r/u2|=r/u2|t
+u3=r/u2||
+=r/u2||
+|=r/u1|
+|u3=r/u1|
 select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
 usename
@@ -238,6 +241,21 @@ select usename from pg_user u join pg_class c on c.relowner = u.usesysid
 where c.oid = 'testown.t1'::regclass;
 usename
 u1
+-- Test it works in security definer functions (issue #1)
+create function testown.sdf() returns void language plpgsql security definer as
+$$
+begin
+	perform partest.create_for('testown.t1', '2014-10-01');
+	perform partest.create_for('testown.t2', '2014-10-01');
+	perform partest.create_for('testown.t3', '2014-10-01');
+end
+$$;
+grant all on function testown.sdf() to public;
+set session authorization u3;
+select testown.sdf();
+sdf
+
+reset session authorization;
 set client_min_messages to 'error';
 drop schema testown cascade;
 reset client_min_messages;
