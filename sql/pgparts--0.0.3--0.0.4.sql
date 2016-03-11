@@ -1,4 +1,4 @@
-create function
+create or replace function
 copy_constraints(src regclass, tgt regclass, exclude_types text[] default '{}')
 returns void
 language plpgsql as $$
