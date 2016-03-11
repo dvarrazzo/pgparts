@@ -1336,12 +1336,16 @@ declare
     indid oid;
     newindid oid;
     oldidxs oid[];
-    stmt text;
+    csrcname text;
+    ctgtname text;
+    srcname name = @extschema@._table_name(src);
+    tgtname name = @extschema@._table_name(tgt);
+    condef text;
 begin
-    for indid, stmt in
+    for indid, csrcname, condef in
         -- the conindid for fkeys is the referenced index, not a local one
         select case when contype <> 'f' then conindid else 0 end,
-            format('alter table %s add %s', tgt, pg_get_constraintdef(oid))
+            conname, pg_get_constraintdef(oid)
         from pg_constraint
         where conrelid = src
         and contype <> any (exclude_types)
@@ -1354,7 +1358,17 @@ begin
             into strict oldidxs;
         end if;
 
-        execute stmt;
+        -- Try to respect the naming convention of the constraint if any.
+        -- Otherwise let postgres make up a new one.
+        if position(srcname in csrcname) > 0 then
+            ctgtname = overlay(csrcname placing tgtname
+                from position(srcname in csrcname)
+                for length(srcname));
+            execute format('alter table %s add constraint %I %s',
+                tgt, ctgtname, condef);
+        else
+            execute format('alter table %s add %s', tgt, condef);
+        end if;
 
         if indid <> 0 then
             select indexrelid from pg_index

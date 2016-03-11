@@ -124,7 +124,11 @@ create table constr2 (
     unique (uint),
     iint int,
     c circle,
-    exclude using gist (c with &&)
+    exclude using gist (c with &&),
+    uint2 int,
+    constraint constr2_carefully_named unique (uint2),
+    uint3 int,
+    constraint whatever unique (uint3)
 ) with (autovacuum_enabled = true, fillfactor = 23);
 alter index constr2_pkey set (fillfactor = 42);
 create index constr2_iint on constr2(iint) with (fillfactor = 69);
@@ -142,9 +146,11 @@ where conrelid = 'constr2_201409'::regclass
 order by conname;
 conname|pg_get_constraintdef
 constr2_201409_c_excl|EXCLUDE USING gist (c WITH &&)
+constr2_201409_carefully_named|UNIQUE (uint2)
 constr2_201409_fid1_fkey|FOREIGN KEY (fid1, fid2) REFERENCES constr1(id1, id2)
 constr2_201409_partition_check|CHECK ('2014-09-01'::date <= date AND date < '2014-10-01'::date)
 constr2_201409_pkey|PRIMARY KEY (id)
+constr2_201409_uint3_key|UNIQUE (uint3)
 constr2_201409_uint_key|UNIQUE (uint)
 constr2_uint_check|CHECK (uint > 0)
 select pg_get_indexdef(indexrelid) from pg_index
@@ -153,9 +159,11 @@ order by 1;
 pg_get_indexdef
 CREATE INDEX constr2_201409_c_excl ON constr2_201409 USING gist (c)
 CREATE INDEX constr2_201409_iint ON constr2_201409 USING btree (iint) WITH (fillfactor=69)
+CREATE UNIQUE INDEX constr2_201409_carefully_named ON constr2_201409 USING btree (uint2)
 CREATE UNIQUE INDEX constr2_201409_pkey ON constr2_201409 USING btree (id) WITH (fillfactor=42)
 CREATE UNIQUE INDEX constr2_201409_somename ON constr2_201409 USING btree (iint) WHERE (id > 0)
 CREATE UNIQUE INDEX constr2_201409_taken1 ON constr2_201409 USING btree (iint) WHERE (id > 1)
+CREATE UNIQUE INDEX constr2_201409_uint3_key ON constr2_201409 USING btree (uint3)
 CREATE UNIQUE INDEX constr2_201409_uint_key ON constr2_201409 USING btree (uint)
 select unnest(reloptions) from pg_class
 where oid = 'constr2_201409'::regclass

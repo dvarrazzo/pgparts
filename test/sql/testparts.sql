@@ -84,7 +84,11 @@ create table constr2 (
     unique (uint),
     iint int,
     c circle,
-    exclude using gist (c with &&)
+    exclude using gist (c with &&),
+    uint2 int,
+    constraint constr2_carefully_named unique (uint2),
+    uint3 int,
+    constraint whatever unique (uint3)
 ) with (autovacuum_enabled = true, fillfactor = 23);
 
 alter index constr2_pkey set (fillfactor = 42);
