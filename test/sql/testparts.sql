@@ -105,7 +105,7 @@ select conname, pg_get_constraintdef(oid, true) from pg_constraint
 where conrelid = 'constr2_201409'::regclass
 order by conname;
 
-select pg_get_indexdef(indexrelid) from pg_index
+select replace(pg_get_indexdef(indexrelid), '''', '') as idx from pg_index
 where indrelid = 'constr2_201409'::regclass
 order by 1;
 

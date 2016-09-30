@@ -153,10 +153,10 @@ constr2_201409_pkey|PRIMARY KEY (id)
 constr2_201409_uint3_key|UNIQUE (uint3)
 constr2_201409_uint_key|UNIQUE (uint)
 constr2_uint_check|CHECK (uint > 0)
-select pg_get_indexdef(indexrelid) from pg_index
+select replace(pg_get_indexdef(indexrelid), '''', '') as idx from pg_index
 where indrelid = 'constr2_201409'::regclass
 order by 1;
-pg_get_indexdef
+idx
 CREATE INDEX constr2_201409_c_excl ON constr2_201409 USING gist (c)
 CREATE INDEX constr2_201409_iint ON constr2_201409 USING btree (iint) WITH (fillfactor=69)
 CREATE UNIQUE INDEX constr2_201409_carefully_named ON constr2_201409 USING btree (uint2)

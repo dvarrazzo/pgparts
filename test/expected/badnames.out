@@ -126,10 +126,10 @@ constr.2_201409_partition_check|CHECK ('2014-09-01'::date <= date AND date < '20
 constr.2_201409_pkey|PRIMARY KEY (id)
 constr.2_201409_uint_key|UNIQUE (uint)
 constr.2_uint_check|CHECK (uint > 0)
-select pg_get_indexdef(indexrelid) from pg_index
+select replace(pg_get_indexdef(indexrelid), '''', '') as idx from pg_index
 where indrelid = '"s3.s4"."constr.2_201409"'::regclass
 order by 1;
-pg_get_indexdef
+idx
 CREATE INDEX "constr.2_201409_c_excl" ON "s3.s4"."constr.2_201409" USING gist (c)
 CREATE INDEX "constr.2_201409_constr2_iint" ON "s3.s4"."constr.2_201409" USING btree (iint) WITH (fillfactor=69)
 CREATE UNIQUE INDEX "constr.2_201409_pkey" ON "s3.s4"."constr.2_201409" USING btree (id)
