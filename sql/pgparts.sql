@@ -1551,6 +1551,7 @@ begin
     where nspname = schema_name
     and relname ~ name_pattern
     and relkind = 'r'
+    order by relname
     loop
         raise notice 'executing statement: %',
             format(statement, t, t, t, t, t);
