@@ -254,6 +254,15 @@ $$;
 
 
 create function
+_null_predicate("table" regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format('%s%I is null', prefix, t.field)
+    from @extschema@.partitioned_table t
+    where t."table" = $1
+$f$;
+
+create function
 _scalar_predicate(partition regclass, prefix text default '') returns text
 language sql stable as
 $f$
@@ -510,6 +519,45 @@ The input table can be either a partitioned table or a partition.
 $$;
 
 
+create function
+_partition_field_nullable(t regclass) returns bool
+language plpgsql as
+$$
+declare
+    rv bool;
+begin
+    select not attnotnull
+    from @extschema@.partitioned_table t
+    join pg_attribute a on attrelid = t."table" and attname = t.field
+    where t."table" = $1
+    into rv;
+    if found then
+        return rv;
+    end if;
+
+    select not attnotnull
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    join pg_attribute on attrelid = t."table" and attname = t.field
+    where p.partition = $1
+    into rv;
+    if found then
+        return rv;
+    end if;
+
+    raise 'the table % is not a partitioned table or a partition', t;
+end
+$$;
+
+comment on function _partition_field_nullable(regclass) is
+$$Return 'true' if the partition field is nullable.
+
+Records with null value in the partition fields are stored in the base table.
+
+The input table can be either a partitioned table or a partition.
+$$;
+
+
 -- }}}
 
 -- Setting up a partitioned table {{{
@@ -589,6 +637,7 @@ begin
         perform @extschema@._create_insert_trigger("table");
         if @extschema@._has_pkey("table") then
             perform @extschema@._create_update_function("table");
+            perform @extschema@._create_update_trigger("table");
         end if;
 
     exception
@@ -635,6 +684,7 @@ begin
 end
 $$;
 
+
 create function
 _maintain_insert_function_empty("table" regclass) returns void
 language plpgsql as $body$
@@ -642,16 +692,20 @@ declare
     schema name = @extschema@._schema_name("table");
     fname name = @extschema@._table_name("table") || '_partition_insert';
     field name;
+    null_check text;
 begin
     select t.field from @extschema@.partitioned_table t
     where t."table" = _maintain_insert_function_empty."table"
     into strict field;
+
+    null_check := @extschema@._null_insert_snippet("table");
 
     execute format(
 $f$
         create or replace function %I.%I()
         returns trigger language plpgsql as $$
 begin
+%s
     raise using
         message = 'no partition available on table %s',
         hint = format(
@@ -659,9 +713,27 @@ begin
 end
 $$
 $f$,
-        schema, fname, "table", "table", field);
+        schema, fname, null_check, "table", "table", field);
 end
 $body$;
+
+
+create function
+_null_insert_snippet("table" regclass) returns text
+language sql stable as
+$f$
+    select case when @extschema@._partition_field_nullable("table") then
+        format(
+$$
+    if %s then
+        return new;
+    end if;
+$$,
+        @extschema@._null_predicate("table", 'new.'))
+    else
+        ''
+    end;
+$f$;
 
 
 create function
@@ -681,6 +753,7 @@ $$,
     where p.partition = $1
 $f$;
 
+
 create function
 _maintain_insert_function_scalar("table" regclass) returns void
 language plpgsql as $body$
@@ -688,6 +761,7 @@ declare
     schema name = @extschema@._schema_name("table");
     fname name = @extschema@._table_name("table") || '_partition_insert';
     field name;
+    null_check text;
     checks text;
 begin
     select t.field from @extschema@.partitioned_table t
@@ -702,12 +776,14 @@ begin
         order by p.partition::text desc) x
     into strict checks;
 
+    null_check := @extschema@._null_insert_snippet("table");
+
     execute format(
 $f$
 create or replace function %I.%I()
 returns trigger language plpgsql as $$
 begin
-%s
+%s%s
     raise using
         message = format(
             $m$partition %I.%%I missing for %I = %%L$m$,
@@ -717,7 +793,7 @@ begin
 end
 $$
 $f$,
-        schema, fname, checks,
+        schema, fname, null_check, checks,
         schema, field, "table", field, field,
         "table", field);
 end
@@ -764,6 +840,7 @@ declare
     fname name = @extschema@._table_name("table") || '_partition_insert';
     field name;
     type regtype;
+    null_check text;
     checks text;
 begin
     select t.field, t.field_type from @extschema@.partitioned_table t
@@ -778,6 +855,8 @@ begin
         order by p.partition::text desc) x
     into strict checks;
 
+    null_check := @extschema@._null_insert_snippet("table");
+
     execute format(
 $f$
 create or replace function %I.%I()
@@ -785,7 +864,7 @@ returns trigger language plpgsql as $$
 declare
     rest %I;
 begin
-%s
+%s%s
     if new.%I = 'empty' then
         raise $m$the field %I cannot be 'empty'$m$;
     end if;
@@ -800,13 +879,12 @@ begin
 end
 $$
 $f$,
-        schema, fname, type, checks,
+        schema, fname, type, null_check, checks,
         field, field,
         schema, field, "table", field, field,
         "table", field);
 end
 $body$;
-
 
 
 create function
@@ -825,6 +903,30 @@ begin
         $t$, tname, "table", sname, fname);
 end
 $body$;
+
+create function
+_create_update_trigger("table" regclass) returns void
+language plpgsql as
+$f$
+declare
+    sname name = @extschema@._schema_name("table");
+    fname name = @extschema@._table_name("table") || '_partition_update';
+    tname name = 'yyy_partition_update';
+begin
+    if not @extschema@._partition_field_nullable("table") then
+        return;
+    end if;
+
+    execute format($t$
+        create trigger %I before update on %s
+        for each row when (not %s)
+        execute procedure %I.%I();
+        $t$,
+        tname, "table",
+        @extschema@._null_predicate("table", 'new.'),
+        sname, fname);
+end
+$f$;
 
 -- The function created is used by triggers on the partitions,
 -- not on the base table. The table must have a primary key.
@@ -1036,32 +1138,42 @@ $$;
 create function
 _create_partition_update_trigger(partition regclass) returns void
 language plpgsql as
-$$
+$f$
 declare
+    base_table regclass;
     fname name;
     sname name;
     -- It should be the last of the triggers "before"
     -- But don't use a 'zzz' prefix as it clashes with pg_repack
     tname name = 'yyy_partition_update';
+    check_null text = '';
 begin
     select
         -- Defined by _create_update_function() in setup()
         @extschema@._table_name(p.base_table) || '_partition_update',
-        @extschema@._schema_name(p.base_table)
+        @extschema@._schema_name(p.base_table),
+        p.base_table
     from @extschema@.existing_partition p
     where p.partition = _create_partition_update_trigger.partition
-    into strict fname, sname;
+    into strict fname, sname, base_table;
+
+    if @extschema@._partition_field_nullable(partition) then
+        check_null = format(
+            '(%s) or',
+            @extschema@._null_predicate(base_table, 'new.'));
+    end if;
 
     execute format($t$
         create trigger %I before update on %s
-        for each row when (not (%s))
+        for each row when (%s not (%s))
         execute procedure %I.%I();
         $t$,
         tname, partition,
+        check_null,
         @extschema@._check_predicate(partition, 'new.'),
         sname, fname);
 end
-$$;
+$f$;
 
 create function
 _constraint_partition(partition regclass) returns void
@@ -1597,3 +1709,5 @@ $$;
 
 
 -- }}}
+
+-- vi: set expandtab:

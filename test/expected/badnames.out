@@ -136,6 +136,55 @@ order by 1;
 unnest
 autovacuum_enabled=true
 fillfactor=23
+-- Table with nullable partition field
+create table "s3.s4"."t1.t3" (
+    id serial primary key,
+    "f1.f2" date,
+    data text);
+select "s1.s2".setup('"s3.s4"."t1.t3"', 'f1.f2', 'monthly');
+setup
+
+insert into "s3.s4"."t1.t3" (data) values ('hi');
+select * from "s3.s4"."t1.t3";
+id|f1.f2|data
+1||hi
+-- Fails insert
+insert into "s3.s4"."t1.t3" ("f1.f2", data) values ('2017-03-20', 'oh');
+ERROR:  no partition available on table "s3.s4"."t1.t3"
+select "s1.s2".create_for('"s3.s4"."t1.t3"', '2017-03-01');
+create_for
+"s3.s4"."t1.t3_201703"
+insert into "s3.s4"."t1.t3" ("f1.f2", data) values ('2017-03-20', 'oh');
+select * from "s3.s4"."t1.t3" order by id;
+id|f1.f2|data
+1||hi
+3|2017-03-20|oh
+-- Can go to null partition
+update "s3.s4"."t1.t3" set "f1.f2" = null where data = 'oh';
+select * from "s3.s4"."t1.t3" order by id;
+id|f1.f2|data
+1||hi
+3||oh
+-- Can go to non-null partition
+update "s3.s4"."t1.t3" set "f1.f2" = '2017-03-21' where data = 'hi';
+select * from "s3.s4"."t1.t3" order by id;
+id|f1.f2|data
+1|2017-03-21|hi
+3||oh
+-- Can change partition
+update "s3.s4"."t1.t3" set "f1.f2" = '2017-04-20' where data = 'hi';
+ERROR:  partition "s3.s4"."t1.t3_201704" missing for "f1.f2" = '2017-04-20'
+select "s1.s2".create_for('"s3.s4"."t1.t3"', '2017-04-01');
+create_for
+"s3.s4"."t1.t3_201704"
+update "s3.s4"."t1.t3" set "f1.f2" = '2017-04-20' where data = 'hi';
+select * from "s3.s4"."t1.t3" order by id;
+id|f1.f2|data
+1|2017-04-20|hi
+3||oh
+select * from only "s3.s4"."t1.t3" order by id;
+id|f1.f2|data
+3||oh
 -- Ownership
 create user "u.1";
 create user "u.2";

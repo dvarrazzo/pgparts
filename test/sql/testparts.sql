@@ -114,6 +114,41 @@ select unnest(reloptions) from pg_class
 where oid = 'constr2_201409'::regclass
 order by 1;
 
+
+-- Table with nullable partition field
+create table nullday (
+    id serial primary key,
+    day date,
+    data text);
+
+select partest.setup('nullday', 'day', 'monthly');
+
+insert into nullday (data) values ('hi');
+select * from nullday;
+
+-- Fails insert
+insert into nullday (day, data) values ('2017-03-20', 'oh');
+select partest.create_for('nullday', '2017-03-01');
+
+insert into nullday (day, data) values ('2017-03-20', 'oh');
+select * from nullday order by id;
+
+-- Can go to null partition
+update nullday set day = null where data = 'oh';
+select * from nullday order by id;
+
+-- Can go to non-null partition
+update nullday set day = '2017-03-21' where data = 'hi';
+select * from nullday order by id;
+
+-- Can change partition
+update nullday set day = '2017-04-20' where data = 'hi';
+select partest.create_for('nullday', '2017-04-01');
+update nullday set day = '2017-04-20' where data = 'hi';
+select * from nullday order by id;
+select * from only nullday order by id;
+
+
 -- Ownership
 create user u1;
 create user u2;

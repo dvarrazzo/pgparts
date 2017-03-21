@@ -93,6 +93,41 @@ select unnest(reloptions) from pg_class
 where oid = '"s3.s4"."constr.2"'::regclass
 order by 1;
 
+
+-- Table with nullable partition field
+create table "s3.s4"."t1.t3" (
+    id serial primary key,
+    "f1.f2" date,
+    data text);
+
+select "s1.s2".setup('"s3.s4"."t1.t3"', 'f1.f2', 'monthly');
+
+insert into "s3.s4"."t1.t3" (data) values ('hi');
+select * from "s3.s4"."t1.t3";
+
+-- Fails insert
+insert into "s3.s4"."t1.t3" ("f1.f2", data) values ('2017-03-20', 'oh');
+select "s1.s2".create_for('"s3.s4"."t1.t3"', '2017-03-01');
+
+insert into "s3.s4"."t1.t3" ("f1.f2", data) values ('2017-03-20', 'oh');
+select * from "s3.s4"."t1.t3" order by id;
+
+-- Can go to null partition
+update "s3.s4"."t1.t3" set "f1.f2" = null where data = 'oh';
+select * from "s3.s4"."t1.t3" order by id;
+
+-- Can go to non-null partition
+update "s3.s4"."t1.t3" set "f1.f2" = '2017-03-21' where data = 'hi';
+select * from "s3.s4"."t1.t3" order by id;
+
+-- Can change partition
+update "s3.s4"."t1.t3" set "f1.f2" = '2017-04-20' where data = 'hi';
+select "s1.s2".create_for('"s3.s4"."t1.t3"', '2017-04-01');
+update "s3.s4"."t1.t3" set "f1.f2" = '2017-04-20' where data = 'hi';
+select * from "s3.s4"."t1.t3" order by id;
+select * from only "s3.s4"."t1.t3" order by id;
+
+
 -- Ownership
 create user "u.1";
 create user "u.2";

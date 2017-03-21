@@ -164,6 +164,55 @@ order by 1;
 unnest
 autovacuum_enabled=true
 fillfactor=23
+-- Table with nullable partition field
+create table nullday (
+    id serial primary key,
+    day date,
+    data text);
+select partest.setup('nullday', 'day', 'monthly');
+setup
+
+insert into nullday (data) values ('hi');
+select * from nullday;
+id|day|data
+1||hi
+-- Fails insert
+insert into nullday (day, data) values ('2017-03-20', 'oh');
+ERROR:  no partition available on table nullday
+select partest.create_for('nullday', '2017-03-01');
+create_for
+nullday_201703
+insert into nullday (day, data) values ('2017-03-20', 'oh');
+select * from nullday order by id;
+id|day|data
+1||hi
+3|2017-03-20|oh
+-- Can go to null partition
+update nullday set day = null where data = 'oh';
+select * from nullday order by id;
+id|day|data
+1||hi
+3||oh
+-- Can go to non-null partition
+update nullday set day = '2017-03-21' where data = 'hi';
+select * from nullday order by id;
+id|day|data
+1|2017-03-21|hi
+3||oh
+-- Can change partition
+update nullday set day = '2017-04-20' where data = 'hi';
+ERROR:  partition public.nullday_201704 missing for day = '2017-04-20'
+select partest.create_for('nullday', '2017-04-01');
+create_for
+nullday_201704
+update nullday set day = '2017-04-20' where data = 'hi';
+select * from nullday order by id;
+id|day|data
+1|2017-04-20|hi
+3||oh
+select * from only nullday order by id;
+id|day|data
+3||oh
 -- Ownership
 create user u1;
 create user u2;
