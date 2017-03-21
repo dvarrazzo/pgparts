@@ -1,5 +1,6 @@
 \pset format unaligned
 \pset footer off
+\set VERBOSITY terse
 create schema prange;
 set datestyle = 'ISO';
 create extension pgparts with schema prange;
@@ -13,7 +14,6 @@ setup
 -- This insert fails
 insert into rangetbl values (100, '[2014-09-15Z,2014-09-16Z)', 'first');
 ERROR:  no partition available on table rangetbl
-HINT:  You should call prange.create_for('rangetbl', '["2014-09-14 17:00:00-07","2014-09-15 17:00:00-07")').
 select * from only rangetbl;
 id|range|data
 select prange.create_for('rangetbl', '2014-09-15');
@@ -32,7 +32,6 @@ id|range|data
 -- Split
 insert into rangetbl values (101, '[2014-09-20Z,2014-10-10Z)', 'second');
 ERROR:  partition public.rangetbl_201410 missing for range = '["2014-09-30 17:00:00-07","2014-10-09 17:00:00-07")'
-HINT:  You should call prange.create_for('rangetbl', '2014-09-30 17:00:00-07').
 select prange.create_for('rangetbl', '2014-10-10');
 create_for
 rangetbl_201410

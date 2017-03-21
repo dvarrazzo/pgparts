@@ -1,5 +1,6 @@
 \pset format unaligned
 \pset footer off
+\set VERBOSITY terse
 create schema partest;
 set datestyle = 'ISO';
 

@@ -1,5 +1,6 @@
 \pset format unaligned
 \pset footer off
+\set VERBOSITY terse
 set datestyle = 'ISO';
 create schema "s1.s2";
 create extension pgparts with schema "s1.s2";
@@ -13,7 +14,6 @@ state|partition
 unpartitioned|
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
 ERROR:  the table "s3.s4"."t1.t2" has not been prepared for partitions yet
-HINT:  You should call "s1.s2".setup('"s3.s4"."t1.t2"').
 select "s1.s2".setup('"s3.s4"."t1.t2"', 'f1.f2', 'monthly',
     '{{nmonths,3}}');
 setup
@@ -23,7 +23,6 @@ state|partition
 missing|
 insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');
 ERROR:  no partition available on table "s3.s4"."t1.t2"
-HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15').
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
 create_for
 "s3.s4"."t1.t2_201407"
@@ -46,9 +45,6 @@ id|f1.f2|data
 -- Update to fail partition
 update "s3.s4"."t1.t2" set "f1.f2" = '2014-10-15' where id = 100;
 ERROR:  partition "s3.s4"."t1.t2_201410" missing for "f1.f2" = '2014-10-15'
-HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-10-15').
-CONTEXT:  SQL statement "insert into "s3.s4"."t1.t2" values (new.*)"
-PL/pgSQL function "s3.s4"."t1.t2_partition_update"() line 4 at SQL statement
 select * from only "s3.s4"."t1.t2";
 id|f1.f2|data
 select * from only "s3.s4"."t1.t2_201407";
@@ -77,12 +73,10 @@ id|f1.f2|data
 -- Trigger has been maintained
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
 ERROR:  partition "s3.s4"."t1.t2_201407" missing for "f1.f2" = '2014-07-10'
-HINT:  You should call "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-07-10').
 insert into "s3.s4"."t1.t2" values (106, '2014-10-10', 'fifth');
 -- Can't create the same partition again
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-07-10');
 ERROR:  the partition "s3.s4"."t1.t2_201407" exists but is detached
-HINT:  You can attach it back using "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10').
 -- But can attach it back
 select "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10');
 attach_for
