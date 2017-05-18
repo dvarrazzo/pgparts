@@ -150,7 +150,7 @@ select tgname, tgenabled, pg_get_triggerdef(t.oid) from pg_trigger t
 where tgrelid = '"s3.s4"."constr.2_201409"'::regclass and not tgisinternal
 order by 1;
 tgname|tgenabled|pg_get_triggerdef
-tr.g2|O|CREATE TRIGGER "tr.g2" AFTER INSERT OR UPDATE ON "s3.s4"."constr.2_201409" FOR EACH STATEMENT EXECUTE PROCEDURE "tr.g_f"()
+tr.g2|O|CREATE TRIGGER "tr.g2" AFTER INSERT OR UPDATE ON "s3.s4"."constr.2_201409" FOR EACH ROW WHEN ((new.fid1 > new.fid2)) EXECUTE PROCEDURE "tr.g_f"()
 tr.g3|D|CREATE TRIGGER "tr.g3" AFTER INSERT OR DELETE ON "s3.s4"."constr.2_201409" FOR EACH STATEMENT EXECUTE PROCEDURE "tr.g_f"()
 yyy_partition_update|O|CREATE TRIGGER yyy_partition_update BEFORE UPDATE ON "s3.s4"."constr.2_201409" FOR EACH ROW WHEN ((NOT (('2014-09-01'::date <= new.date) AND (new.date < '2014-10-01'::date)))) EXECUTE PROCEDURE "s3.s4"."constr.2_partition_update"()
 -- Table with nullable partition field

@@ -1572,7 +1572,7 @@ begin
         -- Find the elements in the trigger definition.
         -- The 'strict' causes an error if the regexp fails to parse
         select regexp_matches(tgdef,
-            '^(.* ON )(.*)( (FOR|WHEN|EXECUTE) .*)$')
+            '^(.* ON )(.*)( FOR .*)$')
         into strict parts;
         execute format('%s%s%s', parts[1], tgt, parts[3]);
 

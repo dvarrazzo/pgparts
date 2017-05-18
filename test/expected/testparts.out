@@ -178,7 +178,7 @@ select tgname, tgenabled, pg_get_triggerdef(t.oid) from pg_trigger t
 where tgrelid = 'constr2_201409'::regclass and not tgisinternal
 order by 1;
 tgname|tgenabled|pg_get_triggerdef
-trg2|O|CREATE TRIGGER trg2 AFTER INSERT OR UPDATE ON constr2_201409 FOR EACH STATEMENT EXECUTE PROCEDURE trg_f()
+trg2|O|CREATE TRIGGER trg2 AFTER INSERT OR UPDATE ON constr2_201409 FOR EACH ROW WHEN ((new.fid1 > new.fid2)) EXECUTE PROCEDURE trg_f()
 trg3|D|CREATE TRIGGER trg3 AFTER INSERT OR DELETE ON constr2_201409 FOR EACH STATEMENT EXECUTE PROCEDURE trg_f()
 yyy_partition_update|O|CREATE TRIGGER yyy_partition_update BEFORE UPDATE ON constr2_201409 FOR EACH ROW WHEN ((NOT (('2014-09-01'::date <= new.date) AND (new.date < '2014-10-01'::date)))) EXECUTE PROCEDURE constr2_partition_update()
 -- Table with nullable partition field
