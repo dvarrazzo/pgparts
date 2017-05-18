@@ -58,7 +58,7 @@ select "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10');
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
 select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10' order by id;
 
--- Constraints and indexes
+-- Constraints, indexes, triggers, options
 create table "s3.s4"."constr.1" (id1 int, id2 int, primary key (id1, id2));
 insert into "s3.s4"."constr.1" values (1,2), (3,4);
 create table "s3.s4"."constr.2" (
@@ -78,6 +78,18 @@ create unique index somename on "s3.s4"."constr.2" (iint) where id > 0;
 create unique index taken on "s3.s4"."constr.2" (iint) where id > 1;
 create table "s3.s4"."constr.2_201409_taken" ();
 
+create function "tr.g_f"() returns trigger language plpgsql as $$
+begin
+	return new;
+end
+$$;
+
+create trigger "tr.g1" before insert or update on "s3.s4"."constr.2" for each row execute procedure "tr.g_f"();
+create trigger "tr.g2" after insert or update on "s3.s4"."constr.2" for each row when (new.fid1 > new.fid2) execute procedure "tr.g_f"();
+create trigger "tr.g3" after insert or delete on "s3.s4"."constr.2" for each statement execute procedure "tr.g_f"();
+create trigger "_tr.g4" after insert or delete on "s3.s4"."constr.2" for each statement execute procedure "tr.g_f"();
+alter table "s3.s4"."constr.2" disable trigger "tr.g3";
+
 select "s1.s2".setup('"s3.s4"."constr.2" ', 'date', 'monthly');
 select "s1.s2".create_for('"s3.s4"."constr.2" ', '2014-09-01');
 
@@ -91,6 +103,10 @@ order by 1;
 
 select unnest(reloptions) from pg_class
 where oid = '"s3.s4"."constr.2"'::regclass
+order by 1;
+
+select tgname, tgenabled, pg_get_triggerdef(t.oid) from pg_trigger t
+where tgrelid = '"s3.s4"."constr.2_201409"'::regclass and not tgisinternal
 order by 1;
 
 

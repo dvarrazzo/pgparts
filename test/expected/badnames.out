@@ -86,7 +86,7 @@ select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10' order by id;
 id|f1.f2|data
 104|2014-07-10|third
 105|2014-07-10|fourth
--- Constraints and indexes
+-- Constraints, indexes, triggers, options
 create table "s3.s4"."constr.1" (id1 int, id2 int, primary key (id1, id2));
 insert into "s3.s4"."constr.1" values (1,2), (3,4);
 create table "s3.s4"."constr.2" (
@@ -104,6 +104,16 @@ create index constr2_iint on "s3.s4"."constr.2" (iint) with (fillfactor = 69);
 create unique index somename on "s3.s4"."constr.2" (iint) where id > 0;
 create unique index taken on "s3.s4"."constr.2" (iint) where id > 1;
 create table "s3.s4"."constr.2_201409_taken" ();
+create function "tr.g_f"() returns trigger language plpgsql as $$
+begin
+	return new;
+end
+$$;
+create trigger "tr.g1" before insert or update on "s3.s4"."constr.2" for each row execute procedure "tr.g_f"();
+create trigger "tr.g2" after insert or update on "s3.s4"."constr.2" for each row when (new.fid1 > new.fid2) execute procedure "tr.g_f"();
+create trigger "tr.g3" after insert or delete on "s3.s4"."constr.2" for each statement execute procedure "tr.g_f"();
+create trigger "_tr.g4" after insert or delete on "s3.s4"."constr.2" for each statement execute procedure "tr.g_f"();
+alter table "s3.s4"."constr.2" disable trigger "tr.g3";
 select "s1.s2".setup('"s3.s4"."constr.2" ', 'date', 'monthly');
 setup
 
@@ -136,6 +146,13 @@ order by 1;
 unnest
 autovacuum_enabled=true
 fillfactor=23
+select tgname, tgenabled, pg_get_triggerdef(t.oid) from pg_trigger t
+where tgrelid = '"s3.s4"."constr.2_201409"'::regclass and not tgisinternal
+order by 1;
+tgname|tgenabled|pg_get_triggerdef
+tr.g2|O|CREATE TRIGGER "tr.g2" AFTER INSERT OR UPDATE ON "s3.s4"."constr.2_201409" FOR EACH STATEMENT EXECUTE PROCEDURE "tr.g_f"()
+tr.g3|D|CREATE TRIGGER "tr.g3" AFTER INSERT OR DELETE ON "s3.s4"."constr.2_201409" FOR EACH STATEMENT EXECUTE PROCEDURE "tr.g_f"()
+yyy_partition_update|O|CREATE TRIGGER yyy_partition_update BEFORE UPDATE ON "s3.s4"."constr.2_201409" FOR EACH ROW WHEN ((NOT (('2014-09-01'::date <= new.date) AND (new.date < '2014-10-01'::date)))) EXECUTE PROCEDURE "s3.s4"."constr.2_partition_update"()
 -- Table with nullable partition field
 create table "s3.s4"."t1.t3" (
     id serial primary key,

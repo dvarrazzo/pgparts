@@ -73,7 +73,7 @@ select * from sometbl where day = '2014-07-10' order by id;
 -- Idempotent
 select partest.attach_for('sometbl', '2014-07-10');
 
--- Constraints, indexes, options
+-- Constraints, indexes, triggers, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);
 create table constr2 (
@@ -99,6 +99,18 @@ create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
 
+create function trg_f() returns trigger language plpgsql as $$
+begin
+	return new;
+end
+$$;
+
+create trigger trg1 before insert or update on constr2 for each row execute procedure trg_f();
+create trigger trg2 after insert or update on constr2 for each row when (new.fid1 > new.fid2) execute procedure trg_f();
+create trigger trg3 after insert or delete on constr2 for each statement execute procedure trg_f();
+create trigger _trg4 after insert or delete on constr2 for each statement execute procedure trg_f();
+alter table constr2 disable trigger trg3;
+
 select partest.setup('constr2', 'date', 'monthly', '{{nmonths,1}}');
 select partest.create_for('constr2', '2014-09-01');
 
@@ -112,6 +124,10 @@ order by 1;
 
 select unnest(reloptions) from pg_class
 where oid = 'constr2_201409'::regclass
+order by 1;
+
+select tgname, tgenabled, pg_get_triggerdef(t.oid) from pg_trigger t
+where tgrelid = 'constr2_201409'::regclass and not tgisinternal
 order by 1;
 
 

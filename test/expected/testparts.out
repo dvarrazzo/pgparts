@@ -105,7 +105,7 @@ id|day|data
 select partest.attach_for('sometbl', '2014-07-10');
 attach_for
 sometbl_201407
--- Constraints, indexes, options
+-- Constraints, indexes, triggers, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);
 create table constr2 (
@@ -128,6 +128,16 @@ create index constr2_iint on constr2(iint) with (fillfactor = 69);
 create unique index somename on constr2(iint) where id > 0;
 create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
+create function trg_f() returns trigger language plpgsql as $$
+begin
+	return new;
+end
+$$;
+create trigger trg1 before insert or update on constr2 for each row execute procedure trg_f();
+create trigger trg2 after insert or update on constr2 for each row when (new.fid1 > new.fid2) execute procedure trg_f();
+create trigger trg3 after insert or delete on constr2 for each statement execute procedure trg_f();
+create trigger _trg4 after insert or delete on constr2 for each statement execute procedure trg_f();
+alter table constr2 disable trigger trg3;
 select partest.setup('constr2', 'date', 'monthly', '{{nmonths,1}}');
 setup
 
@@ -164,6 +174,13 @@ order by 1;
 unnest
 autovacuum_enabled=true
 fillfactor=23
+select tgname, tgenabled, pg_get_triggerdef(t.oid) from pg_trigger t
+where tgrelid = 'constr2_201409'::regclass and not tgisinternal
+order by 1;
+tgname|tgenabled|pg_get_triggerdef
+trg2|O|CREATE TRIGGER trg2 AFTER INSERT OR UPDATE ON constr2_201409 FOR EACH STATEMENT EXECUTE PROCEDURE trg_f()
+trg3|D|CREATE TRIGGER trg3 AFTER INSERT OR DELETE ON constr2_201409 FOR EACH STATEMENT EXECUTE PROCEDURE trg_f()
+yyy_partition_update|O|CREATE TRIGGER yyy_partition_update BEFORE UPDATE ON constr2_201409 FOR EACH ROW WHEN ((NOT (('2014-09-01'::date <= new.date) AND (new.date < '2014-10-01'::date)))) EXECUTE PROCEDURE constr2_partition_update()
 -- Table with nullable partition field
 create table nullday (
     id serial primary key,
