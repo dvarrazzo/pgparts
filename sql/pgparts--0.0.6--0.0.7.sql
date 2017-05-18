@@ -36,7 +36,7 @@ end
 $body$;
 
 
-create function
+create or replace function
 _copy_to_subtable("table" regclass, value text) returns regclass
 language plpgsql as
 $$
