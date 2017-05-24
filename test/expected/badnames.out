@@ -24,6 +24,7 @@ missing|
 insert into "s3.s4"."t1.t2" values (100, '2014-09-15', 'first');
 ERROR:  no partition available on table "s3.s4"."t1.t2"
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-09-15');
+NOTICE:  creating partition "s3.s4"."t1.t2_201407" of table "s3.s4"."t1.t2"
 create_for
 "s3.s4"."t1.t2_201407"
 select * from "s1.s2".info('"s3.s4"."t1.t2"', '2014-09-15');
@@ -52,6 +53,7 @@ id|f1.f2|data
 100|2014-08-15|first
 -- Create the missing partition and try again
 select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-10-15');
+NOTICE:  creating partition "s3.s4"."t1.t2_201410" of table "s3.s4"."t1.t2"
 create_for
 "s3.s4"."t1.t2_201410"
 update "s3.s4"."t1.t2" set "f1.f2" = '2014-10-15' where id = 100;
@@ -65,6 +67,7 @@ id|f1.f2|data
 -- Detach the partition removes it from writing
 insert into "s3.s4"."t1.t2" values (104, '2014-07-10', 'third');
 select "s1.s2".detach_for('"s3.s4"."t1.t2"', '2014-07-10');
+NOTICE:  detaching partition "s3.s4"."t1.t2_201407" from "s3.s4"."t1.t2"
 detach_for
 "s3.s4"."t1.t2_201407"
 -- Partition is there but removed from the base table
@@ -79,6 +82,7 @@ select "s1.s2".create_for('"s3.s4"."t1.t2"', '2014-07-10');
 ERROR:  the partition "s3.s4"."t1.t2_201407" exists but is detached
 -- But can attach it back
 select "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10');
+NOTICE:  attaching partition "s3.s4"."t1.t2_201407" to "s3.s4"."t1.t2"
 attach_for
 "s3.s4"."t1.t2_201407"
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
@@ -118,6 +122,7 @@ select "s1.s2".setup('"s3.s4"."constr.2" ', 'date', 'monthly');
 setup
 
 select "s1.s2".create_for('"s3.s4"."constr.2" ', '2014-09-01');
+NOTICE:  creating partition "s3.s4"."constr.2_201409" of table "s3.s4"."constr.2"
 create_for
 "s3.s4"."constr.2_201409"
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
@@ -169,6 +174,7 @@ id|f1.f2|data
 insert into "s3.s4"."t1.t3" ("f1.f2", data) values ('2017-03-20', 'oh');
 ERROR:  no partition available on table "s3.s4"."t1.t3"
 select "s1.s2".create_for('"s3.s4"."t1.t3"', '2017-03-01');
+NOTICE:  creating partition "s3.s4"."t1.t3_201703" of table "s3.s4"."t1.t3"
 create_for
 "s3.s4"."t1.t3_201703"
 insert into "s3.s4"."t1.t3" ("f1.f2", data) values ('2017-03-20', 'oh');
@@ -192,6 +198,7 @@ id|f1.f2|data
 update "s3.s4"."t1.t3" set "f1.f2" = '2017-04-20' where data = 'hi';
 ERROR:  partition "s3.s4"."t1.t3_201704" missing for "f1.f2" = '2017-04-20'
 select "s1.s2".create_for('"s3.s4"."t1.t3"', '2017-04-01');
+NOTICE:  creating partition "s3.s4"."t1.t3_201704" of table "s3.s4"."t1.t3"
 create_for
 "s3.s4"."t1.t3_201704"
 update "s3.s4"."t1.t3" set "f1.f2" = '2017-04-20' where data = 'hi';
@@ -233,6 +240,7 @@ select "s1.s2".setup('"test.own"."t.1"', 'date', 'monthly');
 setup
 
 select "s1.s2".create_for('"test.own"."t.1"', '2014-09-01');
+NOTICE:  creating partition "test.own"."t.1_201409" of table "test.own"."t.1"
 create_for
 "test.own"."t.1_201409"
 select * from comp_acls('"test.own"."t.1"', '"test.own"."t.1_201409"');
@@ -247,6 +255,7 @@ select "s1.s2".setup('"test.own"."t.2"', 'date', 'monthly');
 setup
 
 select "s1.s2".create_for('"test.own"."t.2"', '2014-09-01');
+NOTICE:  creating partition "test.own"."t.2_201409" of table "test.own"."t.2"
 create_for
 "test.own"."t.2_201409"
 select * from comp_acls('"test.own"."t.2"', '"test.own"."t.2_201409"');

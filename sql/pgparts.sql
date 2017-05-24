@@ -1015,6 +1015,11 @@ begin
         end if;
 
         -- Not found: create it
+        raise notice '%', format('creating partition %I.%I of table %s',
+            @extschema@._schema_name("table"),
+            @extschema@.name_for("table", value),
+            "table");
+
         select @extschema@._copy_to_subtable("table", value)
         into strict partition;
 
@@ -1078,6 +1083,8 @@ begin
     end if;
 
     if partition in (select @extschema@._partitions("table")) then
+        raise notice '%', format('detaching partition %s from %s',
+            partition, "table");
         execute format('alter table %s no inherit %s',
             partition, "table");
         perform @extschema@.maintain_insert_function("table");
@@ -1101,6 +1108,8 @@ begin
     end if;
 
     if partition not in (select @extschema@._partitions("table")) then
+        raise notice '%', format('attaching partition %s to %s',
+            partition, "table");
         execute format('alter table %s inherit %s',
             partition, "table");
         perform @extschema@.maintain_insert_function("table");

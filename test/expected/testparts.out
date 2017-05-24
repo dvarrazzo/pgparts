@@ -31,6 +31,7 @@ ERROR:  no partition available on table sometbl
 select * from only sometbl;
 id|day|data
 select partest.create_for('sometbl', '2014-09-15');
+NOTICE:  creating partition public.sometbl_201407 of table sometbl
 create_for
 sometbl_201407
 select * from partest.info('sometbl', '2014-09-15');
@@ -60,6 +61,7 @@ id|day|data
 100|2014-08-15|first
 -- Create the missing partition and try again
 select partest.create_for('sometbl', '2014-10-15');
+NOTICE:  creating partition public.sometbl_201410 of table sometbl
 create_for
 sometbl_201410
 update sometbl set day = '2014-10-15' where id = 100;
@@ -73,6 +75,7 @@ id|day|data
 -- Detach the partition removes it from writing
 insert into sometbl values (104, '2014-07-10', 'third');
 select partest.detach_for('sometbl', '2014-07-10');
+NOTICE:  detaching partition sometbl_201407 from sometbl
 detach_for
 sometbl_201407
 -- Partition is there but removed from the base table
@@ -94,6 +97,7 @@ select partest.create_for('sometbl', '2014-07-10');
 ERROR:  the partition sometbl_201407 exists but is detached
 -- But can attach it back
 select partest.attach_for('sometbl', '2014-07-10');
+NOTICE:  attaching partition sometbl_201407 to sometbl
 attach_for
 sometbl_201407
 insert into sometbl values (105, '2014-07-10', 'fourth');
@@ -142,6 +146,7 @@ select partest.setup('constr2', 'date', 'monthly', '{{nmonths,1}}');
 setup
 
 select partest.create_for('constr2', '2014-09-01');
+NOTICE:  creating partition public.constr2_201409 of table constr2
 create_for
 constr2_201409
 select conname, pg_get_constraintdef(oid, true) from pg_constraint
@@ -197,6 +202,7 @@ id|day|data
 insert into nullday (day, data) values ('2017-03-20', 'oh');
 ERROR:  no partition available on table nullday
 select partest.create_for('nullday', '2017-03-01');
+NOTICE:  creating partition public.nullday_201703 of table nullday
 create_for
 nullday_201703
 insert into nullday (day, data) values ('2017-03-20', 'oh');
@@ -220,6 +226,7 @@ id|day|data
 update nullday set day = '2017-04-20' where data = 'hi';
 ERROR:  partition public.nullday_201704 missing for day = '2017-04-20'
 select partest.create_for('nullday', '2017-04-01');
+NOTICE:  creating partition public.nullday_201704 of table nullday
 create_for
 nullday_201704
 update nullday set day = '2017-04-20' where data = 'hi';
@@ -269,6 +276,7 @@ select partest.setup('testown.t1', 'date', 'monthly');
 setup
 
 select partest.create_for('testown.t1', '2014-09-01');
+NOTICE:  creating partition testown.t1_201409 of table testown.t1
 create_for
 testown.t1_201409
 -- Note: failure to restore grantor because of issue #1
@@ -286,6 +294,7 @@ select partest.setup('testown.t2', 'date', 'monthly');
 setup
 
 select partest.create_for('testown.t2', '2014-09-01');
+NOTICE:  creating partition testown.t2_201409 of table testown.t2
 create_for
 testown.t2_201409
 select * from comp_acls('testown.t2', 'testown.t2_201409');
@@ -299,6 +308,7 @@ select partest.setup('testown.t3', 'date', 'monthly');
 setup
 
 select partest.create_for('testown.t3', '2014-09-01');
+NOTICE:  creating partition testown.t3_201409 of table testown.t3
 create_for
 testown.t3_201409
 select * from comp_acls('testown.t3', 'testown.t3_201409');
@@ -319,6 +329,9 @@ $$;
 grant all on function testown.sdf() to public;
 set session authorization u3;
 select testown.sdf();
+NOTICE:  creating partition testown.t1_201410 of table testown.t1
+NOTICE:  creating partition testown.t2_201410 of table testown.t2
+NOTICE:  creating partition testown.t3_201410 of table testown.t3
 sdf
 
 reset session authorization;
@@ -334,9 +347,11 @@ select partest.setup('monthts', 'ts', 'monthly');
 setup
 
 select partest.create_for('monthts', '2014-09-01');
+NOTICE:  creating partition public.monthts_201409 of table monthts
 create_for
 monthts_201409
 select partest.create_for('monthts', '2014-10-01');
+NOTICE:  creating partition public.monthts_201410 of table monthts
 create_for
 monthts_201410
 insert into monthts(ts) values ('2014-08-31T23:59:59.999');
@@ -353,9 +368,11 @@ select partest.setup('monthtstz', 'ts', 'monthly');
 setup
 
 select partest.create_for('monthtstz', '2014-09-01');
+NOTICE:  creating partition public.monthtstz_201409 of table monthtstz
 create_for
 monthtstz_201409
 select partest.create_for('monthtstz', '2014-10-01');
+NOTICE:  creating partition public.monthtstz_201410 of table monthtstz
 create_for
 monthtstz_201410
 insert into monthtstz(ts) values ('2014-08-31T23:59:59.999Z');
@@ -372,9 +389,11 @@ select partest.setup('days', 'ts', 'daily', '{{ndays,1}}');
 setup
 
 select partest.create_for('days', '2014-09-01');
+NOTICE:  creating partition public.days_20140901 of table days
 create_for
 days_20140901
 select partest.create_for('days', '2014-09-02');
+NOTICE:  creating partition public.days_20140902 of table days
 create_for
 days_20140902
 insert into days(ts) values ('2014-08-31T23:59:59.999Z');
@@ -392,9 +411,11 @@ select partest.setup('weeks', 'ts', 'daily',
 setup
 
 select partest.create_for('weeks', '2014-09-12');
+NOTICE:  creating partition public.weeks_20140906 of table weeks
 create_for
 weeks_20140906
 select partest.create_for('weeks', '2014-09-13');
+NOTICE:  creating partition public.weeks_20140913 of table weeks
 create_for
 weeks_20140913
 insert into weeks(ts) values ('2014-09-05');
