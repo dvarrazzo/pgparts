@@ -440,12 +440,22 @@ $$;
 
 create function
 partition_for("table" regclass, value text) returns regclass
-language sql as
-$$
-    select @extschema@._table_oid(
-        @extschema@._schema_name("table"),
-        @extschema@.name_for("table", value));
-$$;
+language plpgsql as
+$f$
+declare
+    rv regclass;
+begin
+    execute format($$
+        select p.partition from @extschema@.existing_partition p
+        where base_table = $1
+        and p.start_value::%1$s <= $2::%1$s
+        and $2::%1$s < p.end_value::%1$s
+        $$, @extschema@._base_type(@extschema@._partition_field_type("table")))
+    into rv
+    using "table", value;
+    return rv;
+end
+$f$;
 
 
 create type partition_state as
@@ -1190,12 +1200,14 @@ language plpgsql as
 $$
 declare
     name name = @extschema@.name_for("table", value);
+    schema name = @extschema@._schema_name("table");
     partition regclass;
 begin
     execute format ('create table %I.%I () inherits (%s)',
-        @extschema@._schema_name("table"), name, "table");
+        schema, name, "table");
 
-    partition = @extschema@.partition_for("table", value);
+    partition = @extschema@._table_oid(schema, name);
+
     perform @extschema@.copy_constraints("table", partition,
         exclude_types:='{c}');
     perform @extschema@.copy_indexes("table", partition);
