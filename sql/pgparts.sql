@@ -1211,6 +1211,73 @@ $$;
 
 -- }}}
 
+-- Partitions archiving {{{
+
+create function
+create_archive("table" regclass) returns regclass
+language plpgsql as
+$$
+/* Create an archival area for rotated partitions
+   e.g. archival area on table foo will be foo_all, which also contains
+   foo_archived. Once a partition foo_201705 is archived it can go into
+   _archived, so that querying the foo table will not recurse there but the
+   data is still accessible from foo_all.
+
+    foo_all
+     +- foo                     <- live partitions
+     |   +- foo_201705
+     |   +- foo_201706
+     |   +- foo_201707
+     +- foo_archived            <- archived partitions
+         +- foo_201703
+         +- foo_201704
+*/
+
+declare
+    tname name = @extschema@._table_name("table");
+    sname name = @extschema@._schema_name("table");
+    rv regclass = @extschema@._archive_table("table");
+begin
+    if rv is not null then
+        return rv;
+    end if;
+
+    raise notice 'creating table %_all', tname;
+    execute format('create table %I.%I (like %I.%I)',
+        sname, tname || '_all', sname, tname);
+    execute format('alter table %I.%I inherit %I.%I',
+        sname, tname, sname, tname || '_all');
+
+    raise notice 'creating table %_archived', tname;
+    execute format('create table %I.%I (like %I.%I)',
+        sname, tname || '_archived', sname, tname);
+    execute format('alter table %I.%I inherit %I.%I',
+        sname, tname || '_archived', sname, tname || '_all');
+
+    rv = @extschema@._archive_table("table");
+    if rv is null then
+        raise 'uhm, I should have created this table...';
+    end if;
+
+    return rv;
+end
+$$;
+
+
+create function
+_archive_table("table" regclass) returns regclass
+language sql stable as
+$$
+    -- Return the archive table of a partitioned table; NULL if it doesn't exist
+    select c.oid::regclass
+    from pg_class c join pg_namespace n on n.oid = relnamespace
+    where nspname = @extschema@._schema_name("table")
+    and relname = @extschema@._table_name("table") || '_archived';
+$$;
+
+
+-- }}}
+
 -- Partitioning schemas implementations {{{
 
 create domain positive_integer as integer

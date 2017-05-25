@@ -1,0 +1,33 @@
+\pset format unaligned
+\pset footer off
+\set VERBOSITY terse
+create schema partest;
+set datestyle = 'ISO';
+create extension pgparts with schema partest;
+create table at (
+    id serial primary key,
+    day date not null,
+    data text);
+select partest.setup('at', 'day', 'monthly');
+setup
+
+select partest.create_archive('at');
+NOTICE:  creating table at_all
+NOTICE:  creating table at_archived
+create_archive
+at_archived
+select count(*) from at_all;
+count
+0
+select count(*) from at_archived;
+count
+0
+select partest.create_archive('at');
+create_archive
+at_archived
+select count(*) from at_all;
+count
+0
+select count(*) from at_archived;
+count
+0
