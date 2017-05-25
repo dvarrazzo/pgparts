@@ -48,6 +48,9 @@ select * from at order by id;
 select * from at_all order by id;
 select * from at_archived order by id;
 
+-- Can't re-create an archived partition
+select arctest.create_for('at', '2017-01-10');
+
 -- Archived partition can be unarchived
 select arctest.unarchive_partition('at_201701');
 select arctest.unarchive_partition('at_201702');

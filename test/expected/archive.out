@@ -95,6 +95,9 @@ id|day|data
 select * from at_archived order by id;
 id|day|data
 1|2017-01-10|
+-- Can't re-create an archived partition
+select arctest.create_for('at', '2017-01-10');
+ERROR:  the partition at_201701 exists but was archived
 -- Archived partition can be unarchived
 select arctest.unarchive_partition('at_201701');
 NOTICE:  unarchiving partition at_201701

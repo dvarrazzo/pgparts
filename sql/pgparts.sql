@@ -1043,6 +1043,13 @@ begin
                 hint = format('You can attach it back using '
                         '@extschema@.attach_for(%L, %L).',
                     "table", value);
+        elsif info.state = 'archived' then
+            raise using
+                message = format('the partition %s exists but was archived',
+                    info.partition),
+                hint = format('You can re-enable it using '
+                        '@extschema@.unarchive(%L).',
+                    info.partition);
         elsif info.state = 'missing' then
             null;
         else
