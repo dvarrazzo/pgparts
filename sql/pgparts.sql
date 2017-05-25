@@ -181,7 +181,7 @@ begin
         = (_value2key.field_type, _value2key.schema_name)
     into strict value2key;
 
-    execute 'select ' || value2key || '($1, $2::' || field_type || ')'
+    execute format('select %s($1, $2::%s)', value2key, field_type)
     into strict rv using params, value;
     return rv;
 end
@@ -202,11 +202,10 @@ begin
         = (_value2name.field_type, _value2name.schema_name)
     into strict value2key, key2name;
 
-    execute 'select ' || key2name
-        || '($1, ' || value2key || '($1, $2::'
-        || @extschema@._base_type(field_type) || '), $3)'
-    into strict rv using params, value, base_name;
-    return rv;
+    execute format('select %s($1, %s($1, $2::%s))',
+        key2name, value2key, @extschema@._base_type(field_type))
+    into strict rv using params, value;
+    return base_name || '_' || rv;
 end
 $$;
 
@@ -223,9 +222,8 @@ begin
         = (_value2start.field_type, _value2start.schema_name)
     into strict value2key, key2start;
 
-    execute 'select ' || key2start
-        || '($1, ' || value2key || '($1, $2::'
-        || @extschema@._base_type(field_type) || '))'
+    execute format('select %s($1, %s($1, $2::%s))',
+        key2start, value2key, @extschema@._base_type(field_type))
     into strict rv using params, value;
     return rv;
 end
@@ -244,9 +242,8 @@ begin
         = (_value2end.field_type, _value2end.schema_name)
     into strict value2key, key2end;
 
-    execute 'select ' || key2end
-        || '($1, ' || value2key || '($1, $2::'
-        || @extschema@._base_type(field_type) || '))'
+    execute format('select %s($1, %s($1, $2::%s))',
+        key2end, value2key, @extschema@._base_type(field_type))
     into strict rv using params, value;
     return rv;
 end
@@ -1473,11 +1470,10 @@ language sql stable as $$
 $$;
 
 create function
-_month2name(params params, key int, base_name name)
+_month2name(params params, key int)
 returns name language sql stable as
 $$
-    select (base_name || '_'
-        || to_char(@extschema@._month2start(params, key), 'YYYYMM'))::name;
+    select to_char(@extschema@._month2start(params, key), 'YYYYMM')::name;
 $$;
 
 insert into _schema_vtable values (
@@ -1582,11 +1578,10 @@ language sql stable as $$
 $$;
 
 create function
-_day2name(params params, key int, base_name name)
+_day2name(params params, key int)
 returns name language sql stable as
 $$
-    select (base_name || '_'
-        || to_char(@extschema@._day2start(params, key), 'YYYYMMDD'))::name;
+    select to_char(@extschema@._day2start(params, key), 'YYYYMMDD')::name;
 $$;
 
 insert into _schema_vtable values (
