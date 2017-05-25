@@ -8,7 +8,7 @@ EXTENSION    = pgparts
 EXTVERSION   = $(shell grep default_version $(EXTENSION).control | sed -e "s/default_version[[:space:]]*=[[:space:]]*'\([^']*\)'/\1/")
 
 # DOCS         = $(wildcard doc/*.rst)
-REGRESS      = testparts badnames testrange
+REGRESS      = testparts badnames testrange archive
 REGRESS_OPTS = --inputdir=test --load-language=plpgsql
 PG_CONFIG    = pg_config
 
