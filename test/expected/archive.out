@@ -1,33 +1,130 @@
 \pset format unaligned
 \pset footer off
 \set VERBOSITY terse
-create schema partest;
+create schema arctest;
 set datestyle = 'ISO';
-create extension pgparts with schema partest;
+create extension pgparts with schema arctest;
 create table at (
     id serial primary key,
     day date not null,
     data text);
-select partest.setup('at', 'day', 'monthly');
+-- Create some partitions and data
+select arctest.setup('at', 'day', 'monthly');
 setup
 
-select partest.create_archive('at');
+select arctest.create_for('at', '2017-01-10');
+NOTICE:  creating partition public.at_201701 of table at
+create_for
+at_201701
+select arctest.create_for('at', '2017-02-10');
+NOTICE:  creating partition public.at_201702 of table at
+create_for
+at_201702
+select arctest.create_for('at', '2017-03-10');
+NOTICE:  creating partition public.at_201703 of table at
+create_for
+at_201703
+insert into at (day) values ('2017-01-10');
+insert into at (day) values ('2017-02-10');
+-- Must create the archive before
+select arctest.archive_before('at', '2017-02-15');
+ERROR:  archive table for at not found
+select arctest.create_archive('at');
 NOTICE:  creating table at_all
 NOTICE:  creating table at_archived
 create_archive
 at_archived
-select count(*) from at_all;
-count
-0
-select count(*) from at_archived;
-count
-0
-select partest.create_archive('at');
+select * from at order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+select * from at_all order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+select * from at_archived order by id;
+id|day|data
+-- Idempotent
+select arctest.create_archive('at');
 create_archive
 at_archived
-select count(*) from at_all;
-count
-0
-select count(*) from at_archived;
-count
-0
+select * from at order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+select * from at_all order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+select * from at_archived order by id;
+id|day|data
+-- Archiving partitions
+select arctest.archive_before('at', '2017-02-15');
+NOTICE:  archiving partition at_201701
+archive_before
+at_201701
+select * from arctest.info('at', '2017-01-15');
+state|partition
+archived|at_201701
+select * from arctest.info('at', '2017-02-15');
+state|partition
+present|at_201702
+select * from at order by id;
+id|day|data
+2|2017-02-10|
+select * from at_all order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+select * from at_archived order by id;
+id|day|data
+1|2017-01-10|
+-- Archived partition can't receive data
+insert into at (day) values ('2017-01-10');
+ERROR:  partition public.at_201701 missing for day = '2017-01-10'
+insert into at (day) values ('2017-02-10');
+select * from at order by id;
+id|day|data
+2|2017-02-10|
+4|2017-02-10|
+select * from at_all order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+4|2017-02-10|
+select * from at_archived order by id;
+id|day|data
+1|2017-01-10|
+-- Archived partition can be unarchived
+select arctest.unarchive_partition('at_201701');
+NOTICE:  unarchiving partition at_201701
+unarchive_partition
+at_201701
+select arctest.unarchive_partition('at_201702');
+ERROR:  The table at_201702 is not an archived partition
+select * from arctest.info('at', '2017-01-15');
+state|partition
+present|at_201701
+select * from arctest.info('at', '2017-02-15');
+state|partition
+present|at_201702
+-- Unarchived partition can receive data
+insert into at (day) values ('2017-01-10');
+insert into at (day) values ('2017-02-10');
+select * from at order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+4|2017-02-10|
+5|2017-01-10|
+6|2017-02-10|
+select * from at_all order by id;
+id|day|data
+1|2017-01-10|
+2|2017-02-10|
+4|2017-02-10|
+5|2017-01-10|
+6|2017-02-10|
+select * from at_archived order by id;
+id|day|data
+drop extension pgparts;
