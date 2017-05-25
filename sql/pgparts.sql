@@ -1072,8 +1072,8 @@ begin
             @extschema@.name_for("table", value),
             "table");
 
-        select @extschema@._copy_to_subtable("table", value)
-        into strict partition;
+        partition = @extschema@._copy_to_subtable("table",
+            @extschema@.name_for("table", value));
 
         -- Insert the data about the partition in the table; the other
         -- functions will get the details from here
@@ -1195,11 +1195,10 @@ $$;
 
 
 create function
-_copy_to_subtable("table" regclass, value text) returns regclass
+_copy_to_subtable("table" regclass, name name) returns regclass
 language plpgsql as
 $$
 declare
-    name name = @extschema@.name_for("table", value);
     schema name = @extschema@._schema_name("table");
     partition regclass;
 begin
