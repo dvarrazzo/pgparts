@@ -1347,7 +1347,7 @@ begin
     for part in
         select p.partition from @extschema@.existing_partition p
         where p.partition in (select @extschema@._partitions("table"))
-        and p.end_value::timestamptz < ts
+        and p.end_value::timestamptz <= ts
         order by p.start_value::timestamptz
     loop
         raise notice 'archiving partition %', part;

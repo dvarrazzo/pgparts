@@ -59,7 +59,7 @@ id|day|data
 select * from at_archived order by id;
 id|day|data
 -- Archiving partitions
-select arctest.archive_before('at', '2017-02-15');
+select arctest.archive_before('at', '2017-02-01');
 NOTICE:  archiving partition at_201701
 archive_before
 at_201701

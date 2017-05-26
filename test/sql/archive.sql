@@ -34,7 +34,7 @@ select * from at_all order by id;
 select * from at_archived order by id;
 
 -- Archiving partitions
-select arctest.archive_before('at', '2017-02-15');
+select arctest.archive_before('at', '2017-02-01');
 select * from arctest.info('at', '2017-01-15');
 select * from arctest.info('at', '2017-02-15');
 select * from at order by id;
