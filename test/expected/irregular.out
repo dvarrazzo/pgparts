@@ -1,0 +1,184 @@
+\pset format unaligned
+\pset footer off
+\set VERBOSITY terse
+create schema irrtest;
+set datestyle = 'ISO';
+create extension pgparts with schema irrtest;
+create table irr (
+    id serial primary key,
+    day date not null);
+-- Must be partitioned
+select irrtest.create_partition('irr', '2016-01-01', '2017-01-01');
+ERROR:  the table irr has not been prepared for partitions yet
+-- Check overlapping
+select irrtest.setup('irr', 'day', 'monthly');
+setup
+
+select irrtest.create_partition('irr', '2016-01-01', '2017-01-01');
+NOTICE:  creating partition public.irr_201601_201701 of table irr
+create_partition
+irr_201601_201701
+begin;
+select irrtest.create_for('irr', '2015-12-10');
+NOTICE:  creating partition public.irr_201512 of table irr
+create_for
+irr_201512
+rollback;
+select irrtest.create_for('irr', '2016-01-10');
+create_for
+irr_201601_201701
+select irrtest.create_for('irr', '2016-12-10');
+create_for
+irr_201601_201701
+begin;
+select irrtest.create_for('irr', '2017-01-10');
+NOTICE:  creating partition public.irr_201701 of table irr
+create_for
+irr_201701
+rollback;
+select irrtest.create_partition('irr', '2016-01-01', '2017-01-01');
+ERROR:  the partition(s) irr_201601_201701 overlap the range requested
+select irrtest.create_partition('irr', '2015-01-01', '2018-01-01');
+ERROR:  the partition(s) irr_201601_201701 overlap the range requested
+select irrtest.create_partition('irr', '2016-05-01', '2016-07-01');
+ERROR:  the partition(s) irr_201601_201701 overlap the range requested
+select irrtest.create_partition('irr', '2015-01-01', '2016-01-02');
+ERROR:  the partition(s) irr_201601_201701 overlap the range requested
+begin;
+select irrtest.create_partition('irr', '2015-01-01', '2016-01-01');
+NOTICE:  creating partition public.irr_201501_201601 of table irr
+create_partition
+irr_201501_201601
+rollback;
+select irrtest.create_partition('irr', '2016-12-31', '2018-01-01');
+ERROR:  the partition(s) irr_201601_201701 overlap the range requested
+begin;
+select irrtest.create_partition('irr', '2017-01-01', '2018-01-01');
+NOTICE:  creating partition public.irr_201701_201801 of table irr
+create_partition
+irr_201701_201801
+rollback;
+-- Play with data
+select irrtest.create_for('irr', '2015-12-10');
+NOTICE:  creating partition public.irr_201512 of table irr
+create_for
+irr_201512
+select irrtest.create_for('irr', '2017-01-10');
+NOTICE:  creating partition public.irr_201701 of table irr
+create_for
+irr_201701
+insert into irr (day) values
+	('2015-12-31'), ('2016-01-01'), ('2016-12-31'), ('2017-01-01');
+select tableoid::regclass, day from irr order by day;
+tableoid|day
+irr_201512|2015-12-31
+irr_201601_201701|2016-01-01
+irr_201601_201701|2016-12-31
+irr_201701|2017-01-01
+-- test with timestamptz
+create table irrtz (
+    id serial primary key,
+    ts timestamptz not null);
+select irrtest.setup('irrtz', 'ts', 'monthly', '{{nmonths,3}}');
+setup
+
+select irrtest.create_for('irrtz', '2015-12-10Z');
+NOTICE:  creating partition public.irrtz_201510 of table irrtz
+create_for
+irrtz_201510
+select irrtest.create_for('irrtz', '2017-01-10Z');
+NOTICE:  creating partition public.irrtz_201701 of table irrtz
+create_for
+irrtz_201701
+select irrtest.create_partition('irrtz',
+	('2016-01-01Z'::timestamptz - '1 sec'::interval)::text, '2017-01-01Z');
+ERROR:  the partition(s) irrtz_201510 overlap the range requested
+select irrtest.create_partition('irrtz',
+	'2016-01-01Z', ('2017-01-01Z'::timestamptz + '1 sec'::interval)::text);
+ERROR:  the partition(s) irrtz_201701 overlap the range requested
+select irrtest.create_partition('irrtz', '2016-01-01Z', '2017-01-01Z');
+NOTICE:  creating partition public.irrtz_201601_201701 of table irrtz
+create_partition
+irrtz_201601_201701
+select table_name, start_value, end_value from irrtest.partition
+where base_table = 'irrtz'::regclass order by start_value;
+table_name|start_value|end_value
+irrtz_201510|2015-09-30 17:00:00-07|2015-12-31 16:00:00-08
+irrtz_201601_201701|2015-12-31 16:00:00-08|2016-12-31 16:00:00-08
+irrtz_201701|2016-12-31 16:00:00-08|2017-03-31 17:00:00-07
+insert into irrtz (ts) values
+	('2015-12-31T23:59:59Z'), ('2016-01-01Z'),
+	('2016-12-31T23:59:59Z'), ('2017-01-01Z');
+select tableoid::regclass, ts from irrtz order by ts;
+tableoid|ts
+irrtz_201510|2015-12-31 15:59:59-08
+irrtz_201601_201701|2015-12-31 16:00:00-08
+irrtz_201601_201701|2016-12-31 15:59:59-08
+irrtz_201701|2016-12-31 16:00:00-08
+-- Partition manipulation
+select (irrtest.info('irr'::regclass, day::text)).* from irr order by day;
+state|partition
+present|irr_201512
+present|irr_201601_201701
+present|irr_201601_201701
+present|irr_201701
+select irrtest.detach_for('irr', '2016-01-01');
+NOTICE:  detaching partition irr_201601_201701 from irr
+detach_for
+irr_201601_201701
+select tableoid::regclass, day from irr order by day;
+tableoid|day
+irr_201512|2015-12-31
+irr_201701|2017-01-01
+select irrtest.attach_for('irr', '2016-01-01');
+NOTICE:  attaching partition irr_201601_201701 to irr
+attach_for
+irr_201601_201701
+select tableoid::regclass, day from irr order by day;
+tableoid|day
+irr_201512|2015-12-31
+irr_201601_201701|2016-01-01
+irr_201601_201701|2016-12-31
+irr_201701|2017-01-01
+select irrtest.create_archive('irr');
+NOTICE:  creating table irr_all
+NOTICE:  creating table irr_archived
+create_archive
+irr_archived
+select irrtest.archive_before('irr', '2016-12-31');
+NOTICE:  archiving partition irr_201512
+archive_before
+irr_201512
+select irrtest.archive_before('irr', '2016-12-31');
+archive_before
+select irrtest.archive_before('irr', '2017-01-01');
+NOTICE:  archiving partition irr_201601_201701
+archive_before
+irr_201601_201701
+select irrtest.archive_before('irr', '2017-01-01');
+archive_before
+select * from irr order by day;
+id|day
+4|2017-01-01
+select (irrtest.info('irr'::regclass, day::text)).* from irr_all order by day;
+state|partition
+archived|irr_201512
+archived|irr_201601_201701
+archived|irr_201601_201701
+present|irr_201701
+select irrtest.unarchive_partition('irr_201601_201701');
+NOTICE:  unarchiving partition irr_201601_201701
+unarchive_partition
+irr_201601_201701
+select * from irr order by day;
+id|day
+2|2016-01-01
+3|2016-12-31
+4|2017-01-01
+select (irrtest.info('irr'::regclass, day::text)).* from irr_all order by day;
+state|partition
+archived|irr_201512
+present|irr_201601_201701
+present|irr_201601_201701
+present|irr_201701
+drop extension pgparts;
