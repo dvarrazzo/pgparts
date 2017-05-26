@@ -210,6 +210,31 @@ end
 $$;
 
 create function
+_values2name(
+    field_type regtype, schema_name name, params params,
+    start_value text, end_value text, base_name name)
+returns name language plpgsql stable as $$
+declare
+    value2key text;
+    key2name text;
+    p1 text;
+    p2 text;
+begin
+    select v.value2key, v.key2name from @extschema@._schema_vtable v
+    where (v.field_type, v.schema_name)
+        = (_values2name.field_type, _values2name.schema_name)
+    into strict value2key, key2name;
+
+    execute format(
+        'select %1$s($1, %2$s($1, $2::%3$s)), %1$s($1, %2$s($1, $3::%3$s))',
+        key2name, value2key, @extschema@._base_type(field_type))
+    into strict p1, p2 using params, start_value, end_value;
+
+    return base_name || '_' || p1 || '_' || p2;
+end
+$$;
+
+create function
 _value2start(field_type regtype, schema_name name, params params, value text)
 returns name language plpgsql stable as $$
 declare
@@ -414,6 +439,18 @@ $$
 $$;
 
 create function
+_name_for("table" regclass, start_value text, end_value text) returns name
+language sql stable as
+$$
+    select @extschema@._values2name(
+        cfg.field_type, cfg.schema_name, cfg.schema_params,
+        start_value, end_value, relname)
+    from pg_class r
+    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
+    where cfg."table" = _name_for."table";
+$$;
+
+create function
 start_for("table" regclass, value text) returns name
 language sql stable as
 $$
@@ -454,6 +491,26 @@ begin
 end
 $f$;
 
+create function
+_overlapping("table" regclass, start_value text, end_value text)
+returns regclass[] language plpgsql as
+$f$
+declare
+    rv regclass[];
+begin
+    execute format($$
+        select array_agg(p.partition) from (
+            select * from @extschema@.existing_partition p
+            where base_table = $1
+            and p.start_value::%1$s < $3::%1$s
+            and $2::%1$s < p.end_value::%1$s
+            order by p.partition::text) p
+        $$, @extschema@._base_type(@extschema@._partition_field_type("table")))
+    into rv
+    using "table", start_value, end_value;
+    return rv;
+end
+$f$;
 
 create type partition_state as
     enum ('unpartitioned', 'missing', 'present', 'detached', 'archived');
@@ -1023,6 +1080,73 @@ end
 $$;
 
 create function
+create_partition("table" regclass, start_value text, end_value text) returns regclass
+language plpgsql as
+$$
+declare
+    pname name;
+    type regtype;
+    info @extschema@.partition_info;
+    partition regclass;
+begin
+    begin  -- transaction
+        perform 1 from @extschema@.partitioned_table pt
+        where pt."table" = create_partition.table;
+        if not found then
+            raise using
+                message = format(
+                    'the table %s has not been prepared for partitions yet',
+                    "table"),
+                hint = format('You should call @extschema@.setup(%L).',
+                    "table");
+        end if;
+
+        if array_length(@extschema@._overlapping(
+                "table", start_value, end_value), 1) > 0 then
+            raise 'the partition(s) % overlap the range requested',
+                array_to_string(@extschema@._overlapping(
+                    "table", start_value, end_value), ', ');
+        end if;
+
+        -- Not found: create it
+        raise notice '%', format('creating partition %I.%I of table %s',
+            @extschema@._schema_name("table"),
+            @extschema@._name_for("table", start_value, end_value),
+            "table");
+
+        partition = @extschema@._copy_to_subtable("table",
+            @extschema@._name_for("table", start_value, end_value));
+
+        -- Insert the data about the partition in the table; the other
+        -- functions will get the details from here
+        select field_type from @extschema@.partitioned_table t
+            where t."table" = create_partition."table"
+            into strict type;
+
+        perform @extschema@._register_partition(
+            @extschema@._schema_name(partition),
+            @extschema@._table_name(partition),
+            "table",
+            @extschema@._cast(start_value, @extschema@._base_type(type)),
+            @extschema@._cast(end_value, @extschema@._base_type(type)));
+
+        perform @extschema@._constraint_partition(partition);
+        if @extschema@._has_pkey("table") then
+            perform @extschema@._create_partition_update_trigger(partition);
+        end if;
+        perform @extschema@.maintain_insert_function("table");
+
+    exception
+        -- you can't have this clause empty
+        when division_by_zero then raise 'wat?';
+    end;
+
+    return partition;
+end
+$$;
+
+
+create function
 create_for("table" regclass, value text) returns regclass
 language plpgsql as
 $$
@@ -1031,6 +1155,8 @@ declare
     type regtype;
     info @extschema@.partition_info;
     partition regclass;
+    start_value text;
+    end_value text;
 begin
     begin  -- transaction
         select (@extschema@.info("table", value)).* into strict info;
@@ -1063,6 +1189,23 @@ begin
             raise 'unexpected partition state: %', info.state;
         end if;
 
+        select field_type from @extschema@.partitioned_table t
+            where t."table" = create_for."table"
+            into strict type;
+        start_value = @extschema@._cast(
+            @extschema@.start_for("table", value),
+            @extschema@._base_type(type));
+        end_value = @extschema@._cast(
+            @extschema@.end_for("table", value),
+            @extschema@._base_type(type));
+
+        if array_length(@extschema@._overlapping(
+                "table", start_value, end_value), 1) > 0 then
+            raise 'the partition(s) % overlap the range requested',
+                array_to_string(@extschema@._overlapping(
+                    "table", start_value, end_value), ', ');
+        end if;
+
         -- Not found: create it
         raise notice '%', format('creating partition %I.%I of table %s',
             @extschema@._schema_name("table"),
@@ -1074,20 +1217,10 @@ begin
 
         -- Insert the data about the partition in the table; the other
         -- functions will get the details from here
-        select field_type from @extschema@.partitioned_table t
-            where t."table" = create_for."table"
-            into strict type;
-
         perform @extschema@._register_partition(
             @extschema@._schema_name(partition),
             @extschema@._table_name(partition),
-            "table",
-            @extschema@._cast(
-                @extschema@.start_for("table", value),
-                @extschema@._base_type(type)),
-            @extschema@._cast(
-                @extschema@.end_for("table", value),
-                @extschema@._base_type(type)));
+            "table", start_value, end_value);
 
         perform @extschema@._constraint_partition(partition);
         if @extschema@._has_pkey("table") then
