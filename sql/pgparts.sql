@@ -607,7 +607,9 @@ begin
         return rv;
     end if;
 
-    raise 'the table % is not a partitioned table or a partition', t;
+    raise object_not_in_prerequisite_state using
+        message = format(
+            'the table %s is not a partitioned table or a partition', t);
 end
 $$;
 
@@ -644,7 +646,9 @@ begin
         return rv;
     end if;
 
-    raise 'the table % is not a partitioned table or a partition', t;
+    raise object_not_in_prerequisite_state using
+        message = format(
+            'the table %s is not a partitioned table or a partition', t);
 end
 $$;
 
@@ -680,7 +684,7 @@ begin
         perform 1 from @extschema@.partitioned_table t
         where t."table" = setup."table";
         if found then
-            raise using
+            raise object_not_in_prerequisite_state using
                 message = format(
                     'the table %s is already prepared for partitions',
                     "table"),
@@ -693,7 +697,9 @@ begin
         where attrelid = "table" and attname = field
         into field_type;
         if not found then
-            raise 'field % not found in table %', field, "table";
+            raise undefined_column using
+                message = format(
+                    'field %s not found in table %s', field, "table");
         end if;
 
         -- Does this partitioning schema exist?
@@ -701,8 +707,9 @@ begin
             where (v.field_type, v.schema_name)
                 = (block.field_type, setup.schema_name);
         if not found then
-            raise 'partitioning schema % on type % not known',
-                schema_name, field_type;
+            raise undefined_parameter using
+                message = format('partitioning schema %s on type %s not known',
+                    schema_name, field_type);
         end if;
 
         -- Validate the schema parameters
@@ -712,8 +719,10 @@ begin
                 where sp.schema = schema_name and sp.param = block.param[1]
                 into param_type;
                 if not found then
-                    raise 'unknown parameter for partitioning schema %: %',
-                        schema_name, param[1];
+                    raise undefined_parameter using
+                        message = format(
+                            'unknown parameter for partitioning schema %s: %s',
+                            schema_name, param[1]);
                 end if;
                 perform @extschema@._valid_for_type(block.param[2], param_type);
             end loop;
@@ -805,7 +814,7 @@ $f$
         returns trigger language plpgsql as $$
 begin
 %s
-    raise using
+    raise undefined_table using
         message = 'no partition available on table %s',
         hint = format(
             $m$You should call @extschema@.create_for(%L, %%L).$m$, new.%I);
@@ -883,7 +892,7 @@ create or replace function %I.%I()
 returns trigger language plpgsql as $$
 begin
 %s%s
-    raise using
+    raise undefined_table using
         message = format(
             $m$partition %I.%%I missing for %I = %%L$m$,
             @extschema@.name_for(%L::regclass, new.%I::text), new.%I),
@@ -965,10 +974,11 @@ declare
 begin
 %s%s
     if new.%I = 'empty' then
-        raise $m$the field %I cannot be 'empty'$m$;
+        raise invalid_parameter_value using
+            message = $m$the field %I cannot be 'empty'$m$;
     end if;
 
-    raise using
+    raise undefined_table using
         message = format(
             $m$partition %I.%%I missing for %I = %%L$m$,
             @extschema@.name_for(%L::regclass, lower(new.%I)::text), new.%I),
@@ -1093,7 +1103,7 @@ begin
         perform 1 from @extschema@.partitioned_table pt
         where pt."table" = create_partition.table;
         if not found then
-            raise using
+            raise object_not_in_prerequisite_state using
                 message = format(
                     'the table %s has not been prepared for partitions yet',
                     "table"),
@@ -1103,9 +1113,11 @@ begin
 
         if array_length(@extschema@._overlapping(
                 "table", start_value, end_value), 1) > 0 then
-            raise 'the partition(s) % overlap the range requested',
-                array_to_string(@extschema@._overlapping(
-                    "table", start_value, end_value), ', ');
+            raise invalid_parameter_value using
+                message = format(
+                    'the partition(s) %s overlap the range requested',
+                    array_to_string(@extschema@._overlapping(
+                        "table", start_value, end_value), ', '));
         end if;
 
         -- Not found: create it
@@ -1161,7 +1173,7 @@ begin
     begin  -- transaction
         select (@extschema@.info("table", value)).* into strict info;
         if info.state = 'unpartitioned' then
-            raise using
+            raise object_not_in_prerequisite_state using
                 message = format(
                     'the table %s has not been prepared for partitions yet',
                     "table"),
@@ -1170,14 +1182,14 @@ begin
         elsif info.state = 'present' then
             return info.partition;
         elsif info.state = 'detached' then
-            raise using
+            raise object_not_in_prerequisite_state using
                 message = format('the partition %s exists but is detached',
                     info.partition),
                 hint = format('You can attach it back using '
                         '@extschema@.attach_for(%L, %L).',
                     "table", value);
         elsif info.state = 'archived' then
-            raise using
+            raise object_not_in_prerequisite_state using
                 message = format('the partition %s exists but was archived',
                     info.partition),
                 hint = format('You can re-enable it using '
@@ -1186,7 +1198,9 @@ begin
         elsif info.state = 'missing' then
             null;
         else
-            raise 'unexpected partition state: %', info.state;
+            raise internal_error using
+                message = format(
+                    'unexpected partition state: %s', info.state);
         end if;
 
         select field_type from @extschema@.partitioned_table t
@@ -1201,9 +1215,11 @@ begin
 
         if array_length(@extschema@._overlapping(
                 "table", start_value, end_value), 1) > 0 then
-            raise 'the partition(s) % overlap the range requested',
-                array_to_string(@extschema@._overlapping(
-                    "table", start_value, end_value), ', ');
+            raise invalid_parameter_value using
+                message = format(
+                    'the partition(s) %s overlap the range requested',
+                    array_to_string(@extschema@._overlapping(
+                        "table", start_value, end_value), ', '));
         end if;
 
         -- Not found: create it
@@ -1259,7 +1275,7 @@ declare
     partition regclass = @extschema@.partition_for("table", value);
 begin
     if partition is null then
-        raise using
+        raise undefined_table using
             message = format('there is no %I partition for %L',
                 "table", value);
     end if;
@@ -1283,7 +1299,7 @@ declare
     partition regclass = @extschema@.partition_for("table", value);
 begin
     if partition is null then
-        raise using
+        raise undefined_table using
             message = format('there is no %I partition for %L',
                 "table", value);
     end if;
@@ -1461,7 +1477,8 @@ begin
 
     rv = @extschema@._archive_table("table");
     if rv is null then
-        raise 'uhm, I should have created this table...';
+        raise internal_error using
+            message = 'uhm, I should have created this table...';
     end if;
 
     return rv;
@@ -1478,7 +1495,7 @@ declare
     part regclass;
 begin
     if archive is null then
-        raise using
+        raise undefined_table using
             message = format('archive table for %s not found', "table"),
             hint = format(
                 'You should run "@extschema@.create_archive(%s)" before.',
@@ -1512,7 +1529,9 @@ declare
     parent regclass;
 begin
     if state != 'archived' then
-        raise 'The table % is not an archived partition', part;
+        raise object_not_in_prerequisite_state using
+            message = format(
+                'The table %s is not an archived partition', part);
     end if;
 
     select @extschema@._parents(part) into strict archive;
@@ -2068,7 +2087,7 @@ begin
         returning base_table into tbl;
 
         if not found then
-            raise using
+            raise object_not_in_prerequisite_state using
                 message = format('the table %I doesn''t seem a partition', src);
         end if;
 
