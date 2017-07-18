@@ -321,6 +321,18 @@ begin
 end
 $$;
 
+create function
+_too_old_predicate("table" regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format('%s%I < %L',
+        prefix, t.field, min(p.start_value))
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    where t."table" = $1
+    group by prefix, t.field
+$f$;
+
 
 -- }}}
 
@@ -424,6 +436,15 @@ $$;
 
 comment on function _base_type(regtype) is
 $$If the input type is a range, return its base type, else return the input.$$;
+
+create function
+_params("table" regclass) returns params
+language sql stable strict as
+$$
+    select schema_params
+    from @extschema@.partitioned_table cfg
+    where cfg."table" = $1
+$$;
 
 
 create function
@@ -845,6 +866,30 @@ $f$;
 
 
 create function
+_drop_old_snippet("table" regclass) returns text
+language plpgsql stable as
+$f$
+declare
+    params @extschema@.params = @extschema@._params("table");
+begin
+    if not @extschema@._param_value(params, 'drop_old')::bool then
+        return '';
+    else
+        return format(
+$$
+    if %s then
+        -- discard data too old
+        return null;
+    end if;
+$$,
+        @extschema@._too_old_predicate("table", 'new.'));
+    end if;
+
+end
+$f$;
+
+
+create function
 _scalar_insert_snippet(partition regclass) returns text
 language sql stable as
 $f$
@@ -870,6 +915,7 @@ declare
     fname name = @extschema@._table_name("table") || '_partition_insert';
     field name;
     null_check text;
+    old_check text;
     checks text;
 begin
     select t.field from @extschema@.partitioned_table t
@@ -885,13 +931,14 @@ begin
     into strict checks;
 
     null_check := @extschema@._null_insert_snippet("table");
+    old_check := @extschema@._drop_old_snippet("table");
 
     execute format(
 $f$
 create or replace function %I.%I()
 returns trigger language plpgsql as $$
 begin
-%s%s
+%s%s%s
     raise undefined_table using
         message = format(
             $m$partition %I.%%I missing for %I = %%L$m$,
@@ -901,7 +948,7 @@ begin
 end
 $$
 $f$,
-        schema, fname, null_check, checks,
+        schema, fname, null_check, checks, old_check,
         schema, field, "table", field, field,
         "table", field);
 end
@@ -1594,6 +1641,10 @@ $$The time zone of the partitions boundaries.
 
 Only used if the partitioned field type is timestamp with time zone.$$);
 
+insert into schema_param values (
+    'monthly', 'drop_old', 'bool', 'false',
+    'Discard records going to partitions not available in the past.');
+
 
 create function
 _month2key(params params, value timestamptz) returns int
@@ -1698,6 +1749,11 @@ insert into schema_param values (
 $$The time zone of the partitions boundaries.
 
 Only used if the partitioned field type is timestamp with time zone.$$);
+
+
+insert into schema_param values (
+    'daily', 'drop_old', 'bool', 'false',
+    'Discard records going to partitions not available in the past.');
 
 
 create function

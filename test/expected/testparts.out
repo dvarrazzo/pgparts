@@ -109,6 +109,32 @@ id|day|data
 select partest.attach_for('sometbl', '2014-07-10');
 attach_for
 sometbl_201407
+-- Partition forgetting old data
+create table droppytbl (
+    id serial primary key,
+    day date not null,
+    data text);
+select partest.setup('droppytbl', 'day', 'monthly', '{{nmonths,3},{drop_old,true}}');
+setup
+
+-- One partition should still exist
+insert into droppytbl values (100, '2014-09-15', 'now');
+ERROR:  no partition available on table droppytbl
+select partest.create_for('droppytbl', '2014-09-15');
+NOTICE:  creating partition public.droppytbl_201407 of table droppytbl
+create_for
+droppytbl_201407
+insert into droppytbl values (100, '2014-09-15', 'now');
+-- Data in the future gives error
+insert into droppytbl values (200, '2015-09-15', 'future');
+ERROR:  partition public.droppytbl_201507 missing for day = '2015-09-15'
+-- Data in the past is silently dropped
+insert into droppytbl values (50, '2013-09-15', 'past');
+insert into sometbl values (50, '2013-09-15', 'past');
+ERROR:  partition public.sometbl_201307 missing for day = '2013-09-15'
+select * from droppytbl order by id;
+id|day|data
+100|2014-09-15|now
 -- Constraints, indexes, triggers, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);

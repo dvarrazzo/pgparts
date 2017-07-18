@@ -73,6 +73,29 @@ select * from sometbl where day = '2014-07-10' order by id;
 -- Idempotent
 select partest.attach_for('sometbl', '2014-07-10');
 
+
+-- Partition forgetting old data
+create table droppytbl (
+    id serial primary key,
+    day date not null,
+    data text);
+select partest.setup('droppytbl', 'day', 'monthly', '{{nmonths,3},{drop_old,true}}');
+
+-- One partition should still exist
+insert into droppytbl values (100, '2014-09-15', 'now');
+select partest.create_for('droppytbl', '2014-09-15');
+insert into droppytbl values (100, '2014-09-15', 'now');
+
+-- Data in the future gives error
+insert into droppytbl values (200, '2015-09-15', 'future');
+
+-- Data in the past is silently dropped
+insert into droppytbl values (50, '2013-09-15', 'past');
+insert into sometbl values (50, '2013-09-15', 'past');
+
+select * from droppytbl order by id;
+
+
 -- Constraints, indexes, triggers, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);
