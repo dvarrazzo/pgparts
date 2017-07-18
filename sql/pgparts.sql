@@ -437,6 +437,7 @@ $$;
 comment on function _base_type(regtype) is
 $$If the input type is a range, return its base type, else return the input.$$;
 
+
 create function
 _params("table" regclass) returns params
 language sql stable strict as
@@ -444,6 +445,27 @@ $$
     select schema_params
     from @extschema@.partitioned_table cfg
     where cfg."table" = $1
+$$;
+
+
+create function
+_param("table" regclass, name name, out rv text)
+language plpgsql stable strict as
+$$
+declare
+    params @extschema@.params = @extschema@._params("table");
+    param text[];
+begin
+    rv = @extschema@._param_value(params, name);
+
+    -- return the default
+    if rv is null then
+        select "default" into rv
+        from @extschema@.schema_param sp
+        join @extschema@.partitioned_table pt on pt.schema_name = sp.schema
+        where pt."table" = _param."table" and param = _param.name;
+    end if;
+end
 $$;
 
 
@@ -869,10 +891,8 @@ create function
 _drop_old_snippet("table" regclass) returns text
 language plpgsql stable as
 $f$
-declare
-    params @extschema@.params = @extschema@._params("table");
 begin
-    if not @extschema@._param_value(params, 'drop_old')::bool then
+    if not @extschema@._param("table", 'drop_old')::bool then
         return '';
     else
         return format(
