@@ -4,48 +4,7 @@
 -- Copyright (C) 2014 Daniele Varrazzo <daniele.varrazzo@gmail.com>
 --
 
--- Parameters handling {{{
-
 create domain params as text[][];
-
-create function
-_param_value(params params, name name) returns text
-language plpgsql immutable strict as
-$$
-declare
-    param text[];
-begin
-    foreach param slice 1 in array params::text[][] loop
-        if name = param[1] then
-            return param[2];
-        end if;
-    end loop;
-    return null;
-end
-$$;
-
-create function
-_param_exists(params params, name name) returns bool
-language plpgsql immutable strict as
-$$
-declare
-    param text[];
-begin
-    if array_ndims(params) is null then
-        return false;
-    end if;
-
-    foreach param slice 1 in array params::text[][] loop
-        if name = param[1] then
-            return true;
-        end if;
-    end loop;
-
-    return false;
-end
-$$;
-
--- }}}
 
 -- Tables used to memorize partitioned tables {{{
 
@@ -170,106 +129,88 @@ grant select on existing_partition to public;
 -- Virtual methods dispatch {{{
 
 create function
-_value2key(field_type regtype, schema_name name, params params, value text)
-returns text language plpgsql stable as $$
-declare
-    value2key text;
-    rv text;
-begin
-    select v.value2key from @extschema@._schema_vtable v
-    where (v.field_type, v.schema_name)
-        = (_value2key.field_type, _value2key.schema_name)
-    into strict value2key;
-
-    execute format('select %s($1, $2::%s)', value2key, field_type)
-    into strict rv using params, value;
-    return rv;
-end
-$$;
-
-create function
-_value2name(
-    field_type regtype, schema_name name, params params,
-    value text, base_name name)
-returns name language plpgsql stable as $$
+_value2name("table" regclass, value text, base_name name) returns name
+language plpgsql stable as $$
 declare
     value2key text;
     key2name text;
+    ft regtype = @extschema@._partition_field_type("table");
     rv text;
 begin
     select v.value2key, v.key2name from @extschema@._schema_vtable v
-    where (v.field_type, v.schema_name)
-        = (_value2name.field_type, _value2name.schema_name)
+    where v.field_type = ft
+    and v.schema_name = @extschema@._partition_schema("table")
     into strict value2key, key2name;
 
     execute format('select %s($1, %s($1, $2::%s))',
-        key2name, value2key, @extschema@._base_type(field_type))
-    into strict rv using params, value;
+        key2name, value2key, @extschema@._base_type(ft))
+    into strict rv using "table", value;
     return base_name || '_' || rv;
 end
 $$;
 
 create function
-_values2name(
-    field_type regtype, schema_name name, params params,
-    start_value text, end_value text, base_name name)
+_values2name("table" regclass, start_value text, end_value text, base_name name)
 returns name language plpgsql stable as $$
 declare
     value2key text;
     key2name text;
+    ft regtype = @extschema@._partition_field_type("table");
     p1 text;
     p2 text;
 begin
     select v.value2key, v.key2name from @extschema@._schema_vtable v
-    where (v.field_type, v.schema_name)
-        = (_values2name.field_type, _values2name.schema_name)
+    where v.field_type = ft
+    and v.schema_name = @extschema@._partition_schema("table")
     into strict value2key, key2name;
 
     execute format(
         'select %1$s($1, %2$s($1, $2::%3$s)), %1$s($1, %2$s($1, $3::%3$s))',
-        key2name, value2key, @extschema@._base_type(field_type))
-    into strict p1, p2 using params, start_value, end_value;
+        key2name, value2key, @extschema@._base_type(ft))
+    into strict p1, p2 using "table", start_value, end_value;
 
     return base_name || '_' || p1 || '_' || p2;
 end
 $$;
 
 create function
-_value2start(field_type regtype, schema_name name, params params, value text)
-returns name language plpgsql stable as $$
+_value2start("table" regclass, value text) returns name
+language plpgsql stable as $$
 declare
     value2key text;
     key2start text;
+    ft regtype = @extschema@._partition_field_type("table");
     rv text;
 begin
     select v.value2key, v.key2start from @extschema@._schema_vtable v
-    where (v.field_type, v.schema_name)
-        = (_value2start.field_type, _value2start.schema_name)
+    where v.field_type = ft
+    and v.schema_name = @extschema@._partition_schema("table")
     into strict value2key, key2start;
 
     execute format('select %s($1, %s($1, $2::%s))',
-        key2start, value2key, @extschema@._base_type(field_type))
-    into strict rv using params, value;
+        key2start, value2key, @extschema@._base_type(ft))
+    into strict rv using "table", value;
     return rv;
 end
 $$;
 
 create function
-_value2end(field_type regtype, schema_name name, params params, value text)
-returns name language plpgsql stable as $$
+_value2end("table" regclass, value text) returns name
+language plpgsql stable as $$
 declare
     value2key text;
     key2end text;
+    ft regtype = @extschema@._partition_field_type("table");
     rv text;
 begin
     select v.value2key, v.key2end from @extschema@._schema_vtable v
-    where (v.field_type, v.schema_name)
-        = (_value2end.field_type, _value2end.schema_name)
+    where v.field_type = ft
+    and v.schema_name = @extschema@._partition_schema("table")
     into strict value2key, key2end;
 
     execute format('select %s($1, %s($1, $2::%s))',
-        key2end, value2key, @extschema@._base_type(field_type))
-    into strict rv using params, value;
+        key2end, value2key, @extschema@._base_type(ft))
+    into strict rv using "table", value;
     return rv;
 end
 $$;
@@ -453,18 +394,23 @@ _param("table" regclass, name name, out rv text)
 language plpgsql stable strict as
 $$
 declare
-    params @extschema@.params = @extschema@._params("table");
     param text[];
+    params @extschema@.params = @extschema@._params("table");
 begin
-    rv = @extschema@._param_value(params, name);
+    if params <> '{}' then
+        foreach param slice 1 in array params::text[][] loop
+            if name = param[1] then
+                rv = param[2];
+                return;
+            end if;
+        end loop;
+    end if;
 
     -- return the default
-    if rv is null then
-        select "default" into rv
-        from @extschema@.schema_param sp
-        join @extschema@.partitioned_table pt on pt.schema_name = sp.schema
-        where pt."table" = _param."table" and param = _param.name;
-    end if;
+    select "default" into rv
+    from @extschema@.schema_param sp
+    join @extschema@.partitioned_table pt on pt.schema_name = sp.schema
+    where pt."table" = _param."table" and sp.param = _param.name;
 end
 $$;
 
@@ -473,46 +419,32 @@ create function
 name_for("table" regclass, value text) returns name
 language sql stable as
 $$
-    select @extschema@._value2name(
-        cfg.field_type, cfg.schema_name, cfg.schema_params,
-        value, relname)
+    select @extschema@._value2name(name_for."table", value, relname)
     from pg_class r
-    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
-    where cfg."table" = name_for."table";
+    where r.oid = name_for."table";
 $$;
 
 create function
 _name_for("table" regclass, start_value text, end_value text) returns name
 language sql stable as
 $$
-    select @extschema@._values2name(
-        cfg.field_type, cfg.schema_name, cfg.schema_params,
-        start_value, end_value, relname)
+    select @extschema@._values2name("table", start_value, end_value, relname)
     from pg_class r
-    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
-    where cfg."table" = _name_for."table";
+    where r.oid = _name_for."table";
 $$;
 
 create function
 start_for("table" regclass, value text) returns name
 language sql stable as
 $$
-    select @extschema@._value2start(
-        cfg.field_type, cfg.schema_name, cfg.schema_params, value)
-    from pg_class r
-    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
-    where cfg."table" = start_for."table";
+    select @extschema@._value2start("table", value);
 $$;
 
 create function
 end_for("table" regclass, value text) returns name
 language sql stable as
 $$
-    select @extschema@._value2end(
-        cfg.field_type, cfg.schema_name, cfg.schema_params, value)
-    from pg_class r
-    join @extschema@.partitioned_table cfg on r.oid = cfg."table"
-    where cfg."table" = end_for."table";
+    select @extschema@._value2end("table", value);
 $$;
 
 create function
@@ -704,6 +636,43 @@ The input table can be either a partitioned table or a partition.
 $$;
 
 
+create function
+_partition_schema(t regclass) returns name
+language plpgsql as
+$$
+declare
+    rv name;
+begin
+    select t.schema_name
+    from @extschema@.partitioned_table t
+    where t."table" = $1
+    into rv;
+    if found then
+        return rv;
+    end if;
+
+    select t.schema_name
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    where p.partition = $1
+    into rv;
+    if found then
+        return rv;
+    end if;
+
+    raise object_not_in_prerequisite_state using
+        message = format(
+            'the table %s is not a partitioned table or a partition', t);
+end
+$$;
+
+comment on function _partition_schema(regclass) is
+$$Return the name of the partitioning schema for a table.
+
+The input table can be either a partitioned table or a partition.
+$$;
+
+
 -- }}}
 
 -- Setting up a partitioned table {{{
@@ -770,16 +739,6 @@ begin
                 perform @extschema@._valid_for_type(block.param[2], param_type);
             end loop;
         end if;
-
-        -- Complete the missing parameters with defaults
-        for param_name, param_default in
-        select sp.param, sp."default" from @extschema@.schema_param sp
-        where sp.schema = schema_name loop
-            if not @extschema@._param_exists(schema_params, param_name) then
-                schema_params := schema_params
-                    || array[array[param_name::text, param_default]];
-            end if;
-        end loop;
 
         perform @extschema@._register_partitioned_table(
             "table", field, field_type, schema_name, schema_params);
@@ -1667,36 +1626,36 @@ insert into schema_param values (
 
 
 create function
-_month2key(params params, value timestamptz) returns int
+_month2key("table" regclass, value timestamptz) returns int
 language sql stable as
 $$
     select
         ((12 * (date_part('year', $2) - 1970)
             + date_part('month', $2) - 1)::int
-        / @extschema@._param_value(params, 'nmonths')::int)
-        * @extschema@._param_value(params, 'nmonths')::int;
+        / @extschema@._param("table", 'nmonths')::int)
+        * @extschema@._param("table", 'nmonths')::int;
 $$;
 
 create function
-_month2start(params params, key int) returns date
+_month2start("table" regclass, key int) returns date
 language sql stable as
 $$
     select ('epoch'::date + '1 month'::interval * key)::date;
 $$;
 
 create function
-_month2end(params params, key int) returns date
+_month2end("table" regclass, key int) returns date
 language sql stable as $$
-    select (@extschema@._month2start(params, key)
+    select (@extschema@._month2start("table", key)
         + '1 month'::interval
-        * @extschema@._param_value(params, 'nmonths')::int)::date;
+        * @extschema@._param("table", 'nmonths')::int)::date;
 $$;
 
 create function
-_month2name(params params, key int)
+_month2name("table" regclass, key int)
 returns name language sql stable as
 $$
-    select to_char(@extschema@._month2start(params, key), 'YYYYMM')::name;
+    select to_char(@extschema@._month2start("table", key), 'YYYYMM')::name;
 $$;
 
 insert into _schema_vtable values (
@@ -1711,26 +1670,26 @@ insert into _schema_vtable values (
 
 
 create function
-_month2keytz(params params, value timestamptz) returns int
+_month2keytz("table" regclass, value timestamptz) returns int
 language sql stable as
 $$
-    select @extschema@._month2key(params,
-        value at time zone @extschema@._param_value(params, 'timezone'));
+    select @extschema@._month2key("table",
+        value at time zone @extschema@._param("table", 'timezone'));
 $$;
 
 create function
-_month2starttz(params params, key int) returns timestamptz
+_month2starttz("table" regclass, key int) returns timestamptz
 language sql stable as
 $$
-    select @extschema@._month2start(params, key)::timestamp
-        at time zone @extschema@._param_value(params, 'timezone');
+    select @extschema@._month2start("table", key)::timestamp
+        at time zone @extschema@._param("table", 'timezone');
 $$;
 
 create function
-_month2endtz(params params, key int) returns timestamptz
+_month2endtz("table" regclass, key int) returns timestamptz
 language sql stable as $$
-    select @extschema@._month2end(params, key)::timestamp
-        at time zone @extschema@._param_value(params, 'timezone');
+    select @extschema@._month2end("table", key)::timestamp
+        at time zone @extschema@._param("table", 'timezone');
 $$;
 
 insert into _schema_vtable values (
@@ -1777,39 +1736,39 @@ insert into schema_param values (
 
 
 create function
-_day2key(params params, value timestamptz) returns int
+_day2key("table" regclass, value timestamptz) returns int
 language sql stable as
 $$
     -- The 3 makes weekly partitions starting on Sunday with offset 0
     -- which is consistent with extract(dow), if anything.
     select
         (((value::date - 'epoch'::date)::int
-            - @extschema@._param_value(params, 'start_dow')::int - 3)
-        / @extschema@._param_value(params, 'ndays')::int)
-        * @extschema@._param_value(params, 'ndays')::int;
+            - @extschema@._param("table", 'start_dow')::int - 3)
+        / @extschema@._param("table", 'ndays')::int)
+        * @extschema@._param("table", 'ndays')::int;
 $$;
 
 create function
-_day2start(params params, key int) returns date
+_day2start("table" regclass, key int) returns date
 language sql stable as
 $$
     select ('epoch'::date + '1 day'::interval * (key + 3
-        + @extschema@._param_value(params, 'start_dow')::int))::date;
+        + @extschema@._param("table", 'start_dow')::int))::date;
 $$;
 
 create function
-_day2end(params params, key int) returns date
+_day2end("table" regclass, key int) returns date
 language sql stable as $$
-    select (@extschema@._day2start(params, key)
+    select (@extschema@._day2start("table", key)
         + '1 day'::interval
-        * @extschema@._param_value(params, 'ndays')::int)::date;
+        * @extschema@._param("table", 'ndays')::int)::date;
 $$;
 
 create function
-_day2name(params params, key int)
+_day2name("table" regclass, key int)
 returns name language sql stable as
 $$
-    select to_char(@extschema@._day2start(params, key), 'YYYYMMDD')::name;
+    select to_char(@extschema@._day2start("table", key), 'YYYYMMDD')::name;
 $$;
 
 insert into _schema_vtable values (
@@ -1824,26 +1783,26 @@ insert into _schema_vtable values (
 
 
 create function
-_day2keytz(params params, value timestamptz) returns int
+_day2keytz("table" regclass, value timestamptz) returns int
 language sql stable as
 $$
-    select @extschema@._day2key(params,
-        value at time zone @extschema@._param_value(params, 'timezone'));
+    select @extschema@._day2key("table",
+        value at time zone @extschema@._param("table", 'timezone'));
 $$;
 
 create function
-_day2starttz(params params, key int) returns timestamptz
+_day2starttz("table" regclass, key int) returns timestamptz
 language sql stable as
 $$
-    select @extschema@._day2start(params, key)::timestamp
-        at time zone @extschema@._param_value(params, 'timezone');
+    select @extschema@._day2start("table", key)::timestamp
+        at time zone @extschema@._param("table", 'timezone');
 $$;
 
 create function
-_day2endtz(params params, key int) returns timestamptz
+_day2endtz("table" regclass, key int) returns timestamptz
 language sql stable as $$
-    select @extschema@._day2end(params, key)::timestamp
-        at time zone @extschema@._param_value(params, 'timezone');
+    select @extschema@._day2end("table", key)::timestamp
+        at time zone @extschema@._param("table", 'timezone');
 $$;
 
 insert into _schema_vtable values (
