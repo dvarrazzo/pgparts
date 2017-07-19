@@ -321,13 +321,19 @@ $$
 $$;
 
 create function
+_pkey("table" regclass) returns name
+language sql stable as
+$$
+    select conname from pg_constraint c
+    where conrelid = "table"
+    and contype = 'p';
+$$;
+
+create function
 _has_pkey("table" regclass) returns bool
 language sql stable as
 $$
-    select exists (
-        select 1 from pg_constraint c
-        where conrelid = "table"
-        and contype = 'p');
+    select @extschema@._pkey("table") is not null;
 $$;
 
 create function
@@ -873,18 +879,35 @@ $f$;
 
 
 create function
+_on_conflict_snippet("table" regclass, partition regclass) returns text
+language plpgsql stable as
+$f$
+begin
+    if not @extschema@._param("table", 'on_conflict_drop')::bool then
+        return '';
+    else
+        return format($$
+            on conflict on constraint %I do nothing$$,
+            @extschema@._pkey(partition));
+    end if;
+end
+$f$;
+
+
+create function
 _scalar_insert_snippet(partition regclass) returns text
 language sql stable as
 $f$
     select format(
 $$
     if %s then
-        insert into %I.%I values (new.*);
+        insert into %I.%I values (new.*)%s;
         return null;
     end if;
 $$,
         @extschema@._scalar_predicate(p.partition, 'new.'),
-        p.schema_name, p.table_name)
+        p.schema_name, p.table_name,
+        @extschema@._on_conflict_snippet(p.base_table, p.partition))
     from @extschema@.existing_partition p
     where p.partition = $1
 $f$;
@@ -1637,6 +1660,15 @@ insert into schema_param values (
     'monthly', 'drop_old', 'bool', 'false',
     'Discard records going to partitions not available in the past.');
 
+insert into schema_param values (
+    'monthly', 'on_conflict_drop', 'bool', 'false',
+$$If an insert in a partition has a primary key conflict drop the record.
+
+The strategy can be used with tables receiving replication updates from a
+synchronized table, to cope with an occasional loss of sync: the replication
+can be rewinded a bit and further updates can revert the table into a
+consistent state.$$);
+
 
 create function
 _month2key("table" regclass, value timestamptz) returns int
@@ -1746,6 +1778,15 @@ Only used if the partitioned field type is timestamp with time zone.$$);
 insert into schema_param values (
     'daily', 'drop_old', 'bool', 'false',
     'Discard records going to partitions not available in the past.');
+
+insert into schema_param values (
+    'daily', 'on_conflict_drop', 'bool', 'false',
+$$If an insert in a partition has a primary key conflict drop the record.
+
+The strategy can be used with tables receiving replication updates from a
+synchronized table, to cope with an occasional loss of sync: the replication
+can be rewinded a bit and further updates can revert the table into a
+consistent state.$$);
 
 
 create function
