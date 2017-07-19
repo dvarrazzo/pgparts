@@ -967,27 +967,30 @@ language sql stable as
 $f$
     select format(
 $$
-    if %L && new.%I then
-        if %L @> new.%I then
+    if %L::%I && new.%I then
+        if %L::%I @> new.%I then
             insert into %I.%I values (new.*);
             return null;
         else
-            rest = new.%I - %L;
-            new.%I = new.%I * %L;
+            rest = new.%I - %L::%I;
+            new.%I = new.%I * %L::%I;
             insert into %I.%I values (new.*);
             new.%I = rest;
         end if;
     end if;
 $$,
-        range, field, range, field,         -- if, if
+        range, typname, field,              -- if
+        range, typname, field,              -- if
         schema_name, table_name,            -- insert into
-        field, range, field, field, range,  -- rest =, new.x =
+        field, range, typname,              -- rest =
+        field, field, range, typname,       -- new.x =
         schema_name, table_name, field)     -- insert into
     from (select
-        t.field, p.schema_name, p.table_name,
+        t.field, p.schema_name, p.table_name, typname,
             format('[%s,%s)', p.start_value, p.end_value) as range
         from @extschema@.existing_partition p
         join @extschema@.partitioned_table t on t."table" = p.base_table
+        join pg_type on t.field_type = pg_type.oid
         where p.partition = $1) x
 $f$;
 
