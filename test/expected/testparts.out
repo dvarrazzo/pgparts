@@ -135,6 +135,45 @@ ERROR:  partition public.sometbl_201307 missing for day = '2013-09-15'
 select * from droppytbl order by id;
 id|day|data
 100|2014-09-15|now
+-- A table can be dropped and recreated
+drop table sometbl cascade;
+NOTICE:  drop cascades to 2 other objects
+create table sometbl (
+    id serial primary key,
+    day date not null,
+    foo text);
+select * from partest.info('sometbl', '2014-09-15');
+state|partition
+unpartitioned|
+select partest.create_for('sometbl', '2014-09-15');
+ERROR:  the table sometbl has not been prepared for partitions yet
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
+setup
+
+select * from partest.info('sometbl', '2014-09-15');
+state|partition
+missing|
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
+ERROR:  the table sometbl is already prepared for partitions
+insert into sometbl values (100, '2014-09-15', 'first');
+ERROR:  no partition available on table sometbl
+select partest.create_for('sometbl', '2014-09-15');
+NOTICE:  creating partition public.sometbl_201407 of table sometbl
+create_for
+sometbl_201407
+select * from partest.info('sometbl', '2014-09-15');
+state|partition
+present|sometbl_201407
+insert into sometbl values (100, '2014-09-15', 'first');
+select partest.create_for('sometbl', '2014-10-15');
+NOTICE:  creating partition public.sometbl_201410 of table sometbl
+create_for
+sometbl_201410
+insert into sometbl values (101, '2014-12-15', 'second');
+select tableoid::regclass, * from sometbl order by id;
+tableoid|id|day|foo
+sometbl_201407|100|2014-09-15|first
+sometbl_201410|101|2014-12-15|second
 -- Constraints, indexes, triggers, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);
@@ -160,7 +199,7 @@ create unique index taken on constr2(iint) where id > 1;
 create table constr2_201409_taken ();
 create function trg_f() returns trigger language plpgsql as $$
 begin
-	return new;
+    return new;
 end
 $$;
 create trigger trg1 before insert or update on constr2 for each row execute procedure trg_f();
@@ -347,9 +386,9 @@ u1
 create function testown.sdf() returns void language plpgsql security definer as
 $$
 begin
-	perform partest.create_for('testown.t1', '2014-10-01');
-	perform partest.create_for('testown.t2', '2014-10-01');
-	perform partest.create_for('testown.t3', '2014-10-01');
+    perform partest.create_for('testown.t1', '2014-10-01');
+    perform partest.create_for('testown.t2', '2014-10-01');
+    perform partest.create_for('testown.t3', '2014-10-01');
 end
 $$;
 grant all on function testown.sdf() to public;

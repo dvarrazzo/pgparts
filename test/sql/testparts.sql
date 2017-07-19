@@ -96,6 +96,27 @@ insert into sometbl values (50, '2013-09-15', 'past');
 select * from droppytbl order by id;
 
 
+-- A table can be dropped and recreated
+drop table sometbl cascade;
+create table sometbl (
+    id serial primary key,
+    day date not null,
+    foo text);
+
+select * from partest.info('sometbl', '2014-09-15');
+select partest.create_for('sometbl', '2014-09-15');
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
+select * from partest.info('sometbl', '2014-09-15');
+select partest.setup('sometbl', 'day', 'monthly', '{{nmonths,3}}');
+insert into sometbl values (100, '2014-09-15', 'first');
+select partest.create_for('sometbl', '2014-09-15');
+select * from partest.info('sometbl', '2014-09-15');
+insert into sometbl values (100, '2014-09-15', 'first');
+select partest.create_for('sometbl', '2014-10-15');
+insert into sometbl values (101, '2014-12-15', 'second');
+select tableoid::regclass, * from sometbl order by id;
+
+
 -- Constraints, indexes, triggers, options
 create table constr1 (id1 int, id2 int, primary key (id1, id2));
 insert into constr1 values (1,2), (3,4);
@@ -124,7 +145,7 @@ create table constr2_201409_taken ();
 
 create function trg_f() returns trigger language plpgsql as $$
 begin
-	return new;
+    return new;
 end
 $$;
 
@@ -248,9 +269,9 @@ where c.oid = 'testown.t1'::regclass;
 create function testown.sdf() returns void language plpgsql security definer as
 $$
 begin
-	perform partest.create_for('testown.t1', '2014-10-01');
-	perform partest.create_for('testown.t2', '2014-10-01');
-	perform partest.create_for('testown.t3', '2014-10-01');
+    perform partest.create_for('testown.t1', '2014-10-01');
+    perform partest.create_for('testown.t2', '2014-10-01');
+    perform partest.create_for('testown.t3', '2014-10-01');
 end
 $$;
 grant all on function testown.sdf() to public;

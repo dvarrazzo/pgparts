@@ -1084,7 +1084,8 @@ begin
     into strict pkey;
 
     execute format($f$
-        create function %I.%I() returns trigger language plpgsql as $$
+        create or replace function %I.%I() returns trigger
+            language plpgsql as $$
 begin
     delete from %I.%I where %s;
     insert into %I.%I values (new.*);
@@ -1286,6 +1287,14 @@ _register_partition(
 language plpgsql security definer as
 $$
 begin
+    -- Delete an eventual record of a partition created and dropped
+    delete from @extschema@.partition p
+        where (p.schema_name, p.table_name)
+            = (_register_partition.schema_name, _register_partition.table_name)
+        and not exists (
+            select 1 from pg_class
+            where oid = p.base_table);
+
     insert into @extschema@.partition
         (schema_name, table_name, base_table, start_value, end_value)
     values
