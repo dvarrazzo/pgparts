@@ -1535,9 +1535,7 @@ begin
         sname, tname, sname, tname || '_all');
 
     raise notice 'creating table %_archived', tname;
-    execute format('create table %I.%I (like %I.%I)',
-        sname, tname || '_archived', sname, tname);
-    execute format('alter table %I.%I inherit %I.%I',
+    execute format('create table %I.%I () inherits (%I.%I)',
         sname, tname || '_archived', sname, tname || '_all');
 
     rv = @extschema@._archive_table("table");
