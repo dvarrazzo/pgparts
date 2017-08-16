@@ -216,69 +216,6 @@ end
 $$;
 
 
-create function
-_null_predicate("table" regclass, prefix text default '') returns text
-language sql stable as
-$f$
-    select format('%s%I is null', prefix, t.field)
-    from @extschema@.partitioned_table t
-    where t."table" = $1
-$f$;
-
-create function
-_scalar_predicate(partition regclass, prefix text default '') returns text
-language sql stable as
-$f$
-    select format('%L::%I <= %s%I and %s%I < %L::%I',
-        p.start_value, typname, prefix, t.field,
-        prefix, t.field, p.end_value, typname)
-    from @extschema@.existing_partition p
-    join @extschema@.partitioned_table t on t."table" = p.base_table
-    join pg_type on t.field_type = pg_type.oid
-    where p.partition = $1
-$f$;
-
-create function
-_range_predicate(partition regclass, prefix text default '') returns text
-language sql stable as
-$f$
-    select format($$%s%I <@ '[%s,%s)'::%I$$,
-        prefix, t.field, p.start_value, p.end_value, typname)
-    from @extschema@.existing_partition p
-    join @extschema@.partitioned_table t on t."table" = p.base_table
-    join pg_type on t.field_type = pg_type.oid
-    where p.partition = $1
-$f$;
-
-create function
-_check_predicate(partition regclass, prefix text default '') returns text
-language plpgsql as $$
-declare
-    fname text;
-    rv text;
-begin
-    if @extschema@._is_range(@extschema@._partition_field_type(partition)) then
-        return @extschema@._range_predicate(partition, prefix);
-    else
-        return @extschema@._scalar_predicate(partition, prefix);
-    end if;
-end
-$$;
-
-create function
-_too_old_predicate("table" regclass, prefix text default '') returns text
-language sql stable as
-$f$
-    select format('%s%I < %L::%I',
-        prefix, t.field, min(p.start_value), typname)
-    from @extschema@.existing_partition p
-    join @extschema@.partitioned_table t on t."table" = p.base_table
-    join pg_type on t.field_type = pg_type.oid
-    where t."table" = $1
-    group by prefix, t.field, typname
-$f$;
-
-
 -- }}}
 
 -- Informative functions {{{
@@ -839,6 +776,16 @@ $body$;
 
 
 create function
+_null_predicate("table" regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format('%s%I is null', prefix, t.field)
+    from @extschema@.partitioned_table t
+    where t."table" = $1
+$f$;
+
+
+create function
 _null_insert_snippet("table" regclass) returns text
 language sql stable as
 $f$
@@ -853,6 +800,21 @@ $$,
     else
         ''
     end;
+$f$;
+
+
+create function
+_too_old_predicate("table" regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format('%s%I < %L::%I',
+        prefix, t.field, min(p.start_value), typname)
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    join pg_type on t.field_type = pg_type.oid
+    where t."table" = $1
+    and p.partition in (select @extschema@._partitions("table"))
+    group by prefix, t.field, typname
 $f$;
 
 
@@ -891,6 +853,20 @@ begin
             @extschema@._pkey(partition));
     end if;
 end
+$f$;
+
+
+create function
+_scalar_predicate(partition regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format('%L::%I <= %s%I and %s%I < %L::%I',
+        p.start_value, typname, prefix, t.field,
+        prefix, t.field, p.end_value, typname)
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    join pg_type on t.field_type = pg_type.oid
+    where p.partition = $1
 $f$;
 
 
@@ -959,6 +935,19 @@ $f$,
         "table", field);
 end
 $body$;
+
+
+create function
+_range_predicate(partition regclass, prefix text default '') returns text
+language sql stable as
+$f$
+    select format($$%s%I <@ '[%s,%s)'::%I$$,
+        prefix, t.field, p.start_value, p.end_value, typname)
+    from @extschema@.existing_partition p
+    join @extschema@.partitioned_table t on t."table" = p.base_table
+    join pg_type on t.field_type = pg_type.oid
+    where p.partition = $1
+$f$;
 
 
 create function
@@ -1431,6 +1420,23 @@ begin
 end
 $$;
 
+
+create function
+_check_predicate(partition regclass, prefix text default '') returns text
+language plpgsql as $$
+declare
+    fname text;
+    rv text;
+begin
+    if @extschema@._is_range(@extschema@._partition_field_type(partition)) then
+        return @extschema@._range_predicate(partition, prefix);
+    else
+        return @extschema@._scalar_predicate(partition, prefix);
+    end if;
+end
+$$;
+
+
 create function
 _create_partition_update_trigger(partition regclass) returns void
 language plpgsql as
@@ -1470,6 +1476,7 @@ begin
         sname, fname);
 end
 $f$;
+
 
 create function
 _constraint_partition(partition regclass) returns void

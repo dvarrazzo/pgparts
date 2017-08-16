@@ -130,4 +130,38 @@ id|day|data
 6|2017-02-10|
 select * from at_archived order by id;
 id|day|data
+-- Archived partitions don't mess with the dropold option
+create table arcdroptbl (
+    id serial primary key,
+    day date not null,
+    data text);
+select arctest.setup('arcdroptbl', 'day', 'monthly', '{{drop_old,true}}');
+setup
+
+select arctest.create_for('arcdroptbl', '2017-01-10');
+NOTICE:  creating partition public.arcdroptbl_201701 of table arcdroptbl
+create_for
+arcdroptbl_201701
+select arctest.create_for('arcdroptbl', '2017-02-10');
+NOTICE:  creating partition public.arcdroptbl_201702 of table arcdroptbl
+create_for
+arcdroptbl_201702
+insert into arcdroptbl (day) values ('2017-01-10');
+insert into arcdroptbl (day) values ('2017-02-10');
+select arctest.create_archive('arcdroptbl');
+NOTICE:  creating table arcdroptbl_all
+NOTICE:  creating table arcdroptbl_archived
+create_archive
+arcdroptbl_archived
+select arctest.archive_before('arcdroptbl', '2017-02-01');
+NOTICE:  archiving partition arcdroptbl_201701
+archive_before
+arcdroptbl_201701
+insert into arcdroptbl (day) values ('2017-01-11');     -- discarded
+insert into arcdroptbl (day) values ('2017-02-11');
+select tableoid::regclass, * from arcdroptbl_all order by id;
+tableoid|id|day|data
+arcdroptbl_201701|1|2017-01-10|
+arcdroptbl_201702|2|2017-02-10|
+arcdroptbl_201702|4|2017-02-11|
 drop extension pgparts;
