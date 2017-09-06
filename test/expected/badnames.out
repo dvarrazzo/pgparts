@@ -90,6 +90,35 @@ select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10' order by id;
 id|f1.f2|data
 104|2014-07-10|third
 105|2014-07-10|fourth
+-- No shadow with tables in other schemas
+create schema "sha.dow";
+set search_path to "sha.dow", "$user", public;
+create table "sha.dow"."sha.tbl" (
+    id serial primary key,
+    day date not null,
+    data text);
+select "s1.s2".setup('"sha.tbl"', 'day', 'monthly');
+setup
+
+select "s1.s2".create_for('"sha.tbl"', '2015-01-15');
+NOTICE:  creating partition "sha.dow"."sha.tbl_201501" of table "sha.tbl"
+create_for
+"sha.tbl_201501"
+create temp table "sha.tbl" (like "sha.dow"."sha.tbl");
+insert into "sha.dow"."sha.tbl" values (1, '2015-01-15', 'shadow1');
+insert into "sha.dow"."sha.tbl" values (2, '2015-02-15', 'shadow2');
+ERROR:  partition "sha.dow"."sha.tbl_201502" missing for day = '2015-02-15'
+select "s1.s2".create_for('"sha.dow"."sha.tbl"', '2015-02-15');
+NOTICE:  creating partition "sha.dow"."sha.tbl_201502" of table "sha.dow"."sha.tbl"
+create_for
+"sha.tbl_201502"
+insert into "sha.dow"."sha.tbl" values (2, '2015-02-15', 'shadow2');
+drop table "sha.tbl";
+select tableoid::regclass, * from "sha.tbl" order by id;
+tableoid|id|day|data
+"sha.tbl_201501"|1|2015-01-15|shadow1
+"sha.tbl_201502"|2|2015-02-15|shadow2
+reset search_path;
 -- Constraints, indexes, triggers, options
 create table "s3.s4"."constr.1" (id1 int, id2 int, primary key (id1, id2));
 insert into "s3.s4"."constr.1" values (1,2), (3,4);

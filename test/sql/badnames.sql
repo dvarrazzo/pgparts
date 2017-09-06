@@ -58,6 +58,29 @@ select "s1.s2".attach_for('"s3.s4"."t1.t2"', '2014-07-10');
 insert into "s3.s4"."t1.t2" values (105, '2014-07-10', 'fourth');
 select * from "s3.s4"."t1.t2" where "f1.f2" = '2014-07-10' order by id;
 
+-- No shadow with tables in other schemas
+create schema "sha.dow";
+set search_path to "sha.dow", "$user", public;
+create table "sha.dow"."sha.tbl" (
+    id serial primary key,
+    day date not null,
+    data text);
+select "s1.s2".setup('"sha.tbl"', 'day', 'monthly');
+select "s1.s2".create_for('"sha.tbl"', '2015-01-15');
+
+create temp table "sha.tbl" (like "sha.dow"."sha.tbl");
+
+insert into "sha.dow"."sha.tbl" values (1, '2015-01-15', 'shadow1');
+insert into "sha.dow"."sha.tbl" values (2, '2015-02-15', 'shadow2');
+select "s1.s2".create_for('"sha.dow"."sha.tbl"', '2015-02-15');
+insert into "sha.dow"."sha.tbl" values (2, '2015-02-15', 'shadow2');
+
+drop table "sha.tbl";
+select tableoid::regclass, * from "sha.tbl" order by id;
+
+reset search_path;
+
+
 -- Constraints, indexes, triggers, options
 create table "s3.s4"."constr.1" (id1 int, id2 int, primary key (id1, id2));
 insert into "s3.s4"."constr.1" values (1,2), (3,4);

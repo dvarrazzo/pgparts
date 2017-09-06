@@ -74,6 +74,29 @@ select * from sometbl where day = '2014-07-10' order by id;
 select partest.attach_for('sometbl', '2014-07-10');
 
 
+-- No shadow with tables in other schemas
+create schema shadow;
+set search_path to shadow, "$user", public;
+create table shadow.shatbl (
+    id serial primary key,
+    day date not null,
+    data text);
+select partest.setup('shatbl', 'day', 'monthly');
+select partest.create_for('shatbl', '2015-01-15');
+
+create temp table shatbl (like shadow.shatbl);
+
+insert into shadow.shatbl values (1, '2015-01-15', 'shadow1');
+insert into shadow.shatbl values (2, '2015-02-15', 'shadow2');
+select partest.create_for('shadow.shatbl', '2015-02-15');
+insert into shadow.shatbl values (2, '2015-02-15', 'shadow2');
+
+drop table shatbl;
+select tableoid::regclass, * from shatbl order by id;
+
+reset search_path;
+
+
 -- Partition forgetting old data
 create table droppytbl (
     id serial primary key,

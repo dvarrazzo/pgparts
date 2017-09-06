@@ -248,6 +248,16 @@ $$
 $$;
 
 create function
+_table_literal("table" regclass) returns text
+language sql stable as
+$$
+    select format('%L', format('%I.%I', nspname, relname))
+    from pg_class c
+    join pg_namespace n on n.oid = relnamespace
+    where c.oid = $1;
+$$;
+
+create function
 _owner_name("table" regclass) returns name
 language sql stable as
 $$
@@ -924,14 +934,14 @@ begin
     raise undefined_table using
         message = format(
             $m$partition %I.%%I missing for %I = %%L$m$,
-            @extschema@.name_for(%L::regclass, new.%I::text), new.%I),
+            @extschema@.name_for(%s::regclass, new.%I::text), new.%I),
         hint = format(
             $m$You should call @extschema@.create_for(%L, %%L).$m$, new.%I);
 end
 $$
 $f$,
         schema, fname, null_check, checks, old_check,
-        schema, field, "table", field, field,
+        schema, field, @extschema@._table_literal("table"), field, field,
         "table", field);
 end
 $body$;
@@ -1026,7 +1036,7 @@ begin
     raise undefined_table using
         message = format(
             $m$partition %I.%%I missing for %I = %%L$m$,
-            @extschema@.name_for(%L::regclass, lower(new.%I)::text), new.%I),
+            @extschema@.name_for(%s::regclass, lower(new.%I)::text), new.%I),
         hint = format(
             $m$You should call @extschema@.create_for(%L, %%L).$m$,
             lower(new.%I));
@@ -1035,7 +1045,7 @@ $$
 $f$,
         schema, fname, type, null_check, checks,
         field, field,
-        schema, field, "table", field, field,
+        schema, field, @extschema@._table_literal("table"), field, field,
         "table", field);
 end
 $body$;

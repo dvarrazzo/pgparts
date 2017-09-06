@@ -109,6 +109,35 @@ id|day|data
 select partest.attach_for('sometbl', '2014-07-10');
 attach_for
 sometbl_201407
+-- No shadow with tables in other schemas
+create schema shadow;
+set search_path to shadow, "$user", public;
+create table shadow.shatbl (
+    id serial primary key,
+    day date not null,
+    data text);
+select partest.setup('shatbl', 'day', 'monthly');
+setup
+
+select partest.create_for('shatbl', '2015-01-15');
+NOTICE:  creating partition shadow.shatbl_201501 of table shatbl
+create_for
+shatbl_201501
+create temp table shatbl (like shadow.shatbl);
+insert into shadow.shatbl values (1, '2015-01-15', 'shadow1');
+insert into shadow.shatbl values (2, '2015-02-15', 'shadow2');
+ERROR:  partition shadow.shatbl_201502 missing for day = '2015-02-15'
+select partest.create_for('shadow.shatbl', '2015-02-15');
+NOTICE:  creating partition shadow.shatbl_201502 of table shadow.shatbl
+create_for
+shatbl_201502
+insert into shadow.shatbl values (2, '2015-02-15', 'shadow2');
+drop table shatbl;
+select tableoid::regclass, * from shatbl order by id;
+tableoid|id|day|data
+shatbl_201501|1|2015-01-15|shadow1
+shatbl_201502|2|2015-02-15|shadow2
+reset search_path;
 -- Partition forgetting old data
 create table droppytbl (
     id serial primary key,
