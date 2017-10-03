@@ -21,6 +21,7 @@ insert into at (day) values ('2017-02-10');
 
 -- Must create the archive before
 select arctest.archive_before('at', '2017-02-15');
+select arctest.archive_partition('at_201701');
 
 select arctest.create_archive('at');
 select * from at order by id;
@@ -53,6 +54,7 @@ select arctest.create_for('at', '2017-01-10');
 
 -- Archived partition can be unarchived
 select arctest.unarchive_partition('at_201701');
+select arctest.unarchive_partition('at');
 select arctest.unarchive_partition('at_201702');
 select * from arctest.info('at', '2017-01-15');
 select * from arctest.info('at', '2017-02-15');
@@ -64,6 +66,14 @@ select * from at order by id;
 select * from at_all order by id;
 select * from at_archived order by id;
 
+-- Can archive a specific partition
+select arctest.archive_partition('at_201701');
+insert into at (day) values ('2017-01-11');
+insert into at (day) values ('2017-02-11');
+select tableoid::regclass, * from at order by id;
+
+select arctest.archive_partition('at');
+select arctest.archive_partition('at_201701');
 
 -- Archived partitions don't mess with the dropold option
 
