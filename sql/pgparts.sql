@@ -1604,7 +1604,7 @@ unarchive_partition(part regclass) returns regclass
 language plpgsql as
 $$
 declare
-    state partition_state = @extschema@._partition_state(part);
+    state @extschema@.partition_state = @extschema@._partition_state(part);
     archive regclass;
     parent regclass;
 begin
