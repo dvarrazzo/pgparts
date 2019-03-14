@@ -1723,6 +1723,13 @@ synchronized table, to cope with an occasional loss of sync: the replication
 can be rewinded a bit and further updates can revert the table into a
 consistent state.$$);
 
+insert into schema_param values (
+    'monthly', 'retention', 'interval', null,
+$$The time a partition should be kept alive.
+
+Unused by the extension itself but may be used by a pruning process.
+$$);
+
 
 create function
 _month2key("table" regclass, value timestamptz) returns int
@@ -1828,7 +1835,6 @@ $$The time zone of the partitions boundaries.
 
 Only used if the partitioned field type is timestamp with time zone.$$);
 
-
 insert into schema_param values (
     'daily', 'drop_old', 'bool', 'false',
     'Discard records going to partitions not available in the past.');
@@ -1841,6 +1847,13 @@ The strategy can be used with tables receiving replication updates from a
 synchronized table, to cope with an occasional loss of sync: the replication
 can be rewinded a bit and further updates can revert the table into a
 consistent state.$$);
+
+insert into schema_param values (
+    'daily', 'retention', 'interval', null,
+$$The time a partition should be kept alive.
+
+Unused by the extension itself but may be used by a pruning process.
+$$);
 
 
 create function
